@@ -3,7 +3,9 @@
 Each intent lists the claims an answer would have to make. A claim is grounded
 when its pattern matches the text of a retrieved article; the matching sentence
 becomes the quoted evidence. Ungrounded claims are declined and escalated to
-Tier 2, so one question can be partly answered and partly escalated.
+Tier 2, so one question can be partly answered and partly escalated. A claim
+with a "when" pattern is only required if the question asks about it. Any
+question that matches no intent is escalated, never answered.
 """
 import re
 
@@ -34,6 +36,7 @@ INTENTS = {
         "claims": [
             {"id": "credit_plan_charge_only",
              "claim": "The outage credit applies to the recurring plan charge.",
+             "when": r"plan charge|only applied|applied against",
              "pattern": r"applies to the recurring plan charge only",
              "topic": ["plan charge"],
              "reply": 'The outage credit is calculated on your plan charge: "{quote}" [{doc}].'},
@@ -42,8 +45,8 @@ INTENTS = {
              "pattern": r"outage credit[^.\n]*\b(tax|surcharge)|\b(tax|surcharge)[^.\n]*outage credit",
              "topic": ["tax", "surcharge"],
              "decline": "Our guidance doesn't say whether the credit also reduces the taxes and "
-                        "regulatory surcharges, so I've escalated that part to a Tier 2 Billing "
-                        "Specialist rather than guess."},
+                        "regulatory surcharges, so I've escalated that question to a Tier 2 "
+                        "Billing Specialist rather than guess."},
         ],
     },
     "request_deadline": {
@@ -62,25 +65,36 @@ INTENTS = {
     },
     "open_dispute": {
         "match": r"\bdispute (a|this|the) charge|\bneed to dispute",
-        "expand": "file billing dispute statement date line item",
+        "expand": "file billing dispute identity line item",
         "governing": "R1",
         "claims": [
-            {"id": "dispute_window",
-             "claim": "A specific charge can be disputed within 60 days of the statement date.",
-             "pattern": r"dispute a specific charge [^.\n]*within 60 days of the statement date",
-             "topic": ["dispute"],
-             "reply": 'You can open a dispute: "{quote}" [{doc}].'},
+            {"id": "verify_identity",
+             "claim": "To open a dispute, the account holder's identity is confirmed first.",
+             "pattern": r"Confirm the account holder's identity",
+             "topic": ["identity"],
+             "reply": "I can open a dispute for you. First: {quote} [{doc}]."},
+            {"id": "identify_line_item",
+             "claim": "The dispute must name the specific line item being disputed.",
+             "pattern": r"Identify the exact line item being disputed",
+             "topic": ["line item"],
+             "reply": "Then: {quote} [{doc}]."},
         ],
     },
 }
 INFO = "provide_information"
+UNKNOWN = "unknown"
+
+# A statement with no question that only supplies account or case details.
+INFO_MATCH = r"\bNMB-\d+|card ending|went down on|wasn't back until|invoice dated"
 
 
 def classify(text):
     for name, intent in INTENTS.items():
         if re.search(intent["match"], text, re.I):
             return name
-    return INFO
+    if "?" not in text and re.search(INFO_MATCH, text, re.I):
+        return INFO
+    return UNKNOWN
 
 
 def _plain(body):
@@ -114,11 +128,15 @@ def related(claim, retrieved, kb):
             if any(re.search(rf"\b{t}", _plain(kb[h["id"]]["body"]), re.I) for t in claim["topic"])]
 
 
-def evaluate(intent_name, retrieved, kb, resolution, facts):
+def evaluate(intent_name, question, retrieved, kb, resolution, facts):
     """Return grounded/declined claims, a decision, and the reply text."""
     if intent_name == INFO:
         return {"claims": [], "decision": "NO_QUESTION",
                 "reply": "Thanks, noted.", "escalate": False}
+    if intent_name not in INTENTS:
+        return {"claims": [], "decision": "ESCALATE", "escalate": True,
+                "reply": "I don't have guidance I can rely on to answer that, so I've passed it to a "
+                         "Tier 2 Billing Specialist rather than guess."}
 
     intent = INTENTS[intent_name]
     ctx = {
@@ -128,7 +146,8 @@ def evaluate(intent_name, retrieved, kb, resolution, facts):
         "resolved": facts["outage_end"]["value"].date() if facts["outage_end"]["value"] else None,
     }
     claims, parts = [], []
-    for claim in intent["claims"]:
+    required = [c for c in intent["claims"] if not c.get("when") or re.search(c["when"], question, re.I)]
+    for claim in required:
         ev = ground(claim, retrieved, kb)
         needs_case = intent["governing"] == "case" and resolution["governing_rule"] != "R3"
         if ev and not needs_case:
@@ -145,7 +164,9 @@ def evaluate(intent_name, retrieved, kb, resolution, facts):
                                               f"Billing Specialist."))
 
     grounded = sum(c["status"] == "grounded" for c in claims)
-    if resolution["governing_rule"] == "R5" and intent["governing"] == "case":
+    if not claims:
+        decision = "ESCALATE"
+    elif resolution["governing_rule"] == "R5" and intent["governing"] == "case":
         decision = "ESCALATE"
         parts = ["Because of your account's dispute history or a fraud review, a Tier 2 Billing "
                  "Specialist has to make this decision [R5]."]

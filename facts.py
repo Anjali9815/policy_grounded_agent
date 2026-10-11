@@ -32,11 +32,17 @@ def read_transcript(path=TRANSCRIPT):
 
 
 def turns(text):
-    out = []
+    """Chat turns; a hard-wrapped turn's continuation lines are joined with a space."""
+    out, current = [], None
     for line in text.splitlines():
         m = TURN_RE.match(line)
         if m:
-            out.append({"time": m[1], "role": m[2], "speaker": m[3], "text": m[4]})
+            current = {"time": m[1], "role": m[2], "speaker": m[3], "text": m[4].strip()}
+            out.append(current)
+        elif not line.strip():
+            current = None
+        elif current is not None:
+            current["text"] += " " + line.strip()
     return out
 
 

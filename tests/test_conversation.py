@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import facts  # noqa: E402
 from loader import load_kb, load_policy  # noqa: E402
 from retriever import Retriever  # noqa: E402
-from run import run  # noqa: E402
+from run import Agent, run  # noqa: E402
 
 
 def checks(turn):
@@ -100,9 +100,67 @@ class Conversation(unittest.TestCase):
         self.assertIn("R1", {n["rule"] for n in t["not_applied"]})
         self.assertEqual(t["decision"], "ANSWER")
 
+    def test_1402_open_dispute_gives_next_steps(self):
+        t = self.turns["14:02"]
+        self.assertEqual(t["intent"], "open_dispute")
+        self.assertEqual(t["decision"], "ANSWER")
+        self.assertEqual({c["evidence"]["doc"] for c in t["claims"]}, {"KB-1001"})
+        self.assertIn("Confirm the account holder's identity", t["reply"])
+        self.assertIn("Identify the exact line item", t["reply"])
+        self.assertNotIn("60 days", t["reply"])
+
+    def test_information_turns_are_not_questions(self):
+        for time in ("14:04", "14:06"):
+            self.assertEqual(self.turns[time]["decision"], "NO_QUESTION")
+
     def test_facts_not_used_before_known(self):
         t = self.turns["14:02"]
         self.assertEqual(checks(t)["R3.noc_ticket"], "unverified")
+
+
+class WrappedTranscript(unittest.TestCase):
+    def test_continuation_lines_joined_with_space(self):
+        text = ("[14:13] Customer (Dana Whitfield): how long do I have to submit a\n"
+                "request like this?\n\n[14:14] Agent (Jordan R.): Let me check.\n")
+        turns = facts.turns(text)
+        self.assertEqual(len(turns), 2)
+        self.assertEqual(turns[0]["text"], "how long do I have to submit a request like this?")
+        self.assertEqual(turns[1]["text"], "Let me check.")
+
+
+class UnseenQuestions(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.agent = Agent()
+
+    def test_retention_credit_not_answered_from_kb_1008(self):
+        t = self.agent.answer("Can I get a retention credit instead?")
+        self.assertEqual(t["decision"], "ESCALATE")
+        self.assertNotIn("KB-1008", [r["id"] for r in t["retrieved"]])
+        self.assertNotIn("KB-1008", t["reply"])
+        self.assertNotIn("$50", t["reply"])
+
+    def test_installments_unknown_intent_escalates(self):
+        t = self.agent.answer("Can I pay this bill in installments?")
+        self.assertEqual(t["intent"], "unknown")
+        self.assertEqual(t["decision"], "ESCALATE")
+        self.assertIn("Tier 2", t["reply"])
+
+    def test_outage_credit_taxed_declines(self):
+        t = self.agent.answer("Is the outage credit taxed?")
+        self.assertEqual(t["intent"], "tax_treatment")
+        self.assertEqual(t["decision"], "ESCALATE")
+        self.assertEqual([c["status"] for c in t["claims"]], ["declined"])
+        self.assertIn("Tier 2", t["reply"])
+
+    def test_unrecognized_intents_never_answer(self):
+        for q in ("Can I get a retention credit instead?", "Can I pay this bill in installments?",
+                  "Do you price-match other carriers?", "What's my data usage this month?",
+                  "Can you waive my late fee?", ""):
+            t = self.agent.answer(q)
+            if t["intent"] == "unknown":
+                self.assertEqual(t["decision"], "ESCALATE", q)
+            self.assertNotEqual(t["decision"], "ANSWER", q)
 
 
 if __name__ == "__main__":

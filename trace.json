@@ -7,7 +7,7 @@
       {
         "id": "KB-1001",
         "title": "How to File a Billing Dispute",
-        "score": 14.952
+        "score": 14.442
       },
       {
         "id": "KB-1006",
@@ -15,14 +15,14 @@
         "score": 5.991
       },
       {
-        "id": "KB-1005",
-        "title": "How to Request a Service-Outage Credit",
-        "score": 5.749
-      },
-      {
         "id": "KB-1004",
         "title": "Service-Outage Credits: Eligibility & Credit Calculation",
-        "score": 5.552
+        "score": 4.675
+      },
+      {
+        "id": "KB-1005",
+        "title": "How to Request a Service-Outage Credit",
+        "score": 4.453
       }
     ],
     "excluded_by_scope": [
@@ -80,28 +80,48 @@
     "escalation_reasons": [],
     "claims": [
       {
-        "id": "dispute_window",
-        "claim": "A specific charge can be disputed within 60 days of the statement date.",
+        "id": "verify_identity",
+        "claim": "To open a dispute, the account holder's identity is confirmed first.",
         "status": "grounded",
         "evidence": {
           "doc": "KB-1001",
-          "quote": "Customers can dispute a specific charge on their Nimbus Wireless invoice within 60 days of the statement date",
-          "match": "dispute a specific charge on their Nimbus Wireless invoice within 60 days of the statement date",
+          "quote": "Confirm the account holder's identity (name, account number, and either the last 4 digits of the payment method on file or the account PIN)",
+          "match": "Confirm the account holder's identity",
           "docs": [
             "KB-1001"
           ],
           "all": [
             {
               "doc": "KB-1001",
-              "quote": "Customers can dispute a specific charge on their Nimbus Wireless invoice within 60 days of the statement date",
-              "match": "dispute a specific charge on their Nimbus Wireless invoice within 60 days of the statement date"
+              "quote": "Confirm the account holder's identity (name, account number, and either the last 4 digits of the payment method on file or the account PIN)",
+              "match": "Confirm the account holder's identity"
+            }
+          ]
+        }
+      },
+      {
+        "id": "identify_line_item",
+        "claim": "The dispute must name the specific line item being disputed.",
+        "status": "grounded",
+        "evidence": {
+          "doc": "KB-1001",
+          "quote": "Identify the exact line item being disputed (date, amount, description as shown on the invoice)",
+          "match": "Identify the exact line item being disputed",
+          "docs": [
+            "KB-1001"
+          ],
+          "all": [
+            {
+              "doc": "KB-1001",
+              "quote": "Identify the exact line item being disputed (date, amount, description as shown on the invoice)",
+              "match": "Identify the exact line item being disputed"
             }
           ]
         }
       }
     ],
     "decision": "ANSWER",
-    "reply": "You can open a dispute: \"Customers can dispute a specific charge on their Nimbus Wireless invoice within 60 days of the statement date\" [KB-1001].",
+    "reply": "I can open a dispute for you. First: Confirm the account holder's identity (name, account number, and either the last 4 digits of the payment method on file or the account PIN) [KB-1001]. Then: Identify the exact line item being disputed (date, amount, description as shown on the invoice) [KB-1001].",
     "escalate": false
   },
   {
