@@ -71,6 +71,13 @@ def _computed(resolution, known):
     }
 
 
+def _computed_for(state):
+    out = _computed(state["resolution"], state["known"])
+    if state["gate"].get("requested_amount") is not None:
+        out["customer_asked_for"] = f"${state['gate']['requested_amount']:,.2f} (requested, never approved)"
+    return out
+
+
 def context_tokens(docs):
     return sum(approx_tokens(d["body"]) for d in docs.values())
 
@@ -164,8 +171,7 @@ def build(kb, policy, all_facts, llm=None, router_llm=None, breaker=None):
         evidence = [{"claim_id": c["id"], "docs": c["evidence"]["docs"],
                      "quotes": [e["quote"] for e in c["evidence"]["all"]]} for c in grounded]
         try:
-            segments = client.phrase(state["question"], result["segments"], evidence,
-                                     _computed(state["resolution"], state["known"]))
+            segments = client.phrase(state["question"], result["segments"], evidence, _computed_for(state))
             return {"segments": segments, "reply_source": "llm"}
         except LLMError as e:
             breaker.trip("responder_agent", e)

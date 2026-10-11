@@ -1,5 +1,7 @@
 """Walk the transcript's customer turns through the agent graph; print and trace each turn."""
+import argparse
 import json
+import sys
 from pathlib import Path
 
 import facts as facts_mod
@@ -73,6 +75,7 @@ class Agent:
             "request_deadline": resolution["request_deadline"],
             "pending_verification": resolution["pending_verification"],
             "escalation_reasons": resolution["escalation_reasons"],
+            "requested_amount": result.get("requested_amount"),
             "claims": result["claims"], "cited_articles": cited_articles(result),
             "decision": result["decision"], "escalate": result["escalate"],
             "segments": s["segments"], "reply": " ".join(seg["text"] for seg in s["segments"]),
@@ -150,8 +153,14 @@ def trace_path(agent):
     return TRACES / f"trace_{getattr(agent.llm or agent.router_llm, 'provider', 'llm')}.json"
 
 
-if __name__ == "__main__":
-    agent = Agent()
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Run the agent over a transcript's customer turns.")
+    parser.add_argument("--transcript", type=Path, default=facts_mod.TRANSCRIPT,
+                        help="chat transcript to run (default: Dana Whitfield's)")
+    args = parser.parse_args(argv)
+
+    agent = Agent(transcript=facts_mod.read_transcript(args.transcript))
+    print(f"Transcript: {args.transcript}")
     print("\n".join(header(agent)))
     trace = agent.run()
     show(trace)
@@ -159,3 +168,8 @@ if __name__ == "__main__":
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps(trace, indent=2, default=str, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"\nwrote {path.relative_to(TRACES.parent)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

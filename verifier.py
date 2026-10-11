@@ -31,6 +31,10 @@ NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 
 DASHES = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"), "-")
+DASHES.update(dict.fromkeys(map(ord, "\u2018\u2019"), "'"))
+# The customer's requested amount may only be repeated to deny it ("not $100.00", "can't confirm $100.00").
+DENIAL = re.compile(r"(\bnot|rather than|instead of|can't confirm|cannot confirm|unable to confirm)"
+                    r"\s*(the\s+)?$", re.I)
 
 
 def normalize(text):
@@ -119,8 +123,25 @@ def allowed_values(gate_result, resolution, facts):
     return allowed
 
 
+def _amount_pattern(amount):
+    whole, _, cents = format(amount, "f").partition(".")
+    whole = f"{int(whole):,}".replace(",", ",?")
+    tail = rf"(?:\.{cents})" if cents and cents.strip("0") else r"(?:\.0{1,2})?"
+    return re.compile(rf"\$?\s?{whole}{tail}(?!\d)(?:\s*(?:dollars|bucks))?", re.I)
+
+
+def _requested_only_denied(text, amount):
+    """True if every mention of the requested amount is a denial of it, not an approval."""
+    for m in _amount_pattern(amount).finditer(text):
+        if not DENIAL.search(text[max(0, m.start() - 30):m.start()]):
+            return False
+    return True
+
+
 def verify(segments, template_segments, gate_result, resolution, facts):
     errors, unsupported = [], []
+    requested = gate_result.get("requested_amount")
+    requested_value = format(requested.normalize(), "f") if requested is not None else None
     template_ids = [s["claim_id"] for s in template_segments]
     claims = {c["id"]: c for c in gate_result["claims"]}
     allowed = allowed_values(gate_result, resolution, facts)
@@ -144,7 +165,15 @@ def verify(segments, template_segments, gate_result, resolution, facts):
                 errors.append(f"'{cid}' cites {docs} outside the sentence that states the claim")
         elif claim and "Tier 2" not in text:
             errors.append(f"declined '{cid}' does not say it was escalated to Tier 2")
-        bad = sorted(values(text) - allowed)
+        bad = values(text) - allowed
+        if requested_value in bad:
+            # Known only because the customer said it; allowed solely as a denied amount.
+            if _requested_only_denied(text, requested):
+                bad.discard(requested_value)
+            else:
+                errors.append(f"'{cid}' presents the requested amount ${requested:,.2f} as approved")
+                bad.discard(requested_value)
+        bad = sorted(bad)
         if bad:
             unsupported += bad
             errors.append(f"'{cid}' states values not in evidence or computed facts: {bad}")

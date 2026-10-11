@@ -65,6 +65,26 @@ class AskLoop(unittest.TestCase):
         self.assertIn("decision:   ESCALATE", out)
 
 
+class TranscriptOption(unittest.TestCase):
+    def test_ask_uses_given_transcript(self):
+        import tempfile
+        import facts
+        text = facts.read_transcript()
+        cut = text[:text.index("[14:11]")]  # Dana's chat up to and including the 14:09 turn
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "short.txt"
+            path.write_text(cut, encoding="utf-8")
+            _, out = session(["--no-llm", "--transcript", str(path)], ["quit"])
+        self.assertIn(f"Transcript: {path}", out)
+        self.assertIn("Case memory: loaded 4 transcript turns", out)
+
+    def test_default_transcript_unchanged(self):
+        import facts
+        _, out = session(["--no-llm"], ["quit"])
+        self.assertIn(f"Transcript: {facts.TRANSCRIPT}", out)
+        self.assertIn("Case memory: loaded 6 transcript turns", out)
+
+
 class LangSmithEval(unittest.TestCase):
     def test_cited_articles_and_evaluators_on_all_cases(self):
         target = eval_langsmith.make_target(Agent(use_llm=False))

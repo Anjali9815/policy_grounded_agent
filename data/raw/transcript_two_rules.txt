@@ -1,0 +1,22 @@
+NimbusCare Chat Transcript
+Channel: Web Chat — Billing Support
+Session ID: CHT-2026-10-08-220415
+Date: October 8, 2026
+Customer: Marcus Lee
+Account Number: NMB-5521980
+Plan: Nimbus Solo Unlimited (1 line) — $90.00/month recurring charge
+Agent: Priya S., NimbusCare Billing
+
+[10:01] Customer (Marcus Lee): Hi, two problems with my bill. My internet was down from September 15th at 8 AM until September 20th at 8 AM, and I was also charged the $14.99 streaming add-on twice on the invoice dated October 1st.
+
+[10:02] Agent (Priya S.): Thanks Marcus. Can you confirm your account number and the last 4 digits of the card on file?
+
+[10:03] Customer (Marcus Lee): Account is NMB-5521980, card ending 2290.
+
+[10:04] Agent (Priya S.): You're verified. I see a confirmed outage ticket, OUT-61207, for your address covering September 15, 8:00 AM through September 20, 8:00 AM. I can also see the duplicate streaming add-on charge.
+
+[10:05] Customer (Marcus Lee): Great. How much credit do I get for the outage?
+
+[10:06] Customer (Marcus Lee): And can you just add the duplicate charge into the same outage credit so it's one refund?
+
+[10:07] Customer (Marcus Lee): Is the duplicate charge refund also limited to $75?

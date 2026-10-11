@@ -6,10 +6,13 @@ whole conversation. --fresh skips the replay: the case memory starts empty and n
 fact established during the chat (outage ticket, dates, statement) is known yet,
 only the account header. Type "quit" to exit.
 
-Usage: python ask.py [--fresh] [--no-llm]
+Usage: python ask.py [--fresh] [--no-llm] [--transcript PATH]
 """
 import argparse
 import sys
+from pathlib import Path
+
+import facts as facts_mod
 
 from eval_cases import UNSEEN_TIME
 from run import Agent, header
@@ -17,12 +20,12 @@ from run import Agent, header
 FRESH_TIME = "00:00"  # before the first turn: only header facts are known
 
 
-def load_agent(fresh=False, use_llm=None):
-    agent = Agent(use_llm=use_llm)
+def load_agent(fresh=False, use_llm=None, transcript=None):
+    agent = Agent(transcript=transcript, use_llm=use_llm)
     if fresh:
         return agent, FRESH_TIME, 0
     # Replay the transcript without LLMs; only the resulting case memory is kept.
-    warm = Agent(use_llm=False)
+    warm = Agent(transcript=transcript, use_llm=False)
     warm.run()
     agent.memory = warm.memory
     return agent, UNSEEN_TIME, len(warm.memory.decisions)
@@ -43,9 +46,13 @@ def main(argv=None, input_fn=input, out=sys.stdout):
     parser = argparse.ArgumentParser(description="Ask the billing-dispute agent questions.")
     parser.add_argument("--fresh", action="store_true", help="start with empty case memory")
     parser.add_argument("--no-llm", action="store_true", help="deterministic only, even if USE_LLM=1")
+    parser.add_argument("--transcript", type=Path, default=facts_mod.TRANSCRIPT,
+                        help="chat transcript for the case (default: Dana Whitfield's)")
     args = parser.parse_args(argv)
 
-    agent, time, loaded = load_agent(args.fresh, use_llm=False if args.no_llm else None)
+    agent, time, loaded = load_agent(args.fresh, use_llm=False if args.no_llm else None,
+                                     transcript=facts_mod.read_transcript(args.transcript))
+    print(f"Transcript: {args.transcript}", file=out)
     print("\n".join(header(agent)), file=out)
     print(f"Case memory: {'empty (--fresh)' if args.fresh else f'loaded {loaded} transcript turns'}. "
           f'Type "quit" to exit.', file=out)

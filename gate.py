@@ -11,6 +11,7 @@ is escalated, never answered. When R5 governs, the R5 claims replace the
 intent's claims and the turn always escalates with no credit issued.
 """
 import re
+from decimal import Decimal
 
 INTENTS = {
     "credit_limit": {
@@ -226,12 +227,60 @@ def _result(claims, decision, segments, escalate):
             "reply": " ".join(s["text"] for s in segments), "escalate": escalate}
 
 
+CREDIT_INTENTS = {"credit_limit"}
+AMOUNT = re.compile(r"\$\s?(\d[\d,]*(?:\.\d{1,2})?)|\b(\d[\d,]*(?:\.\d{1,2})?)\s*(?:dollars|bucks)\b", re.I)
+LIMIT_AMOUNT = Decimal("75")  # "$75" in a credit_limit question names the limit, not a request
+
+
+def money(amount):
+    return f"${amount:,.2f}"
+
+
+def extract_requested_amount(question, intent_name):
+    """The amount the customer asks for ($100, 100 dollars, 100 bucks) in a credit question, else None.
+
+    $75 is the goodwill limit the customer is asking about, so it is not a request. More than one
+    other amount is ambiguous and yields None.
+    """
+    if intent_name not in CREDIT_INTENTS:
+        return None
+    amounts = {Decimal((m[1] or m[2]).replace(",", "")) for m in AMOUNT.finditer(question)}
+    amounts.discard(LIMIT_AMOUNT)
+    return amounts.pop() if len(amounts) == 1 else None
+
+
+def _requested_segment(requested, resolution, decision):
+    """Never promises the requested amount: compare it to a confirmed R3 credit, else decline it."""
+    credit = resolution["credit"]
+    confirmed = (resolution["governing_rule"] == "R3" and credit is not None
+                 and not resolution["escalate"] and decision != "ESCALATE")
+    if not confirmed:
+        text = f"I can't confirm {money(requested)}."
+    elif requested > credit:
+        text = f"The credit for your outage comes to {money(credit)}, not {money(requested)}."
+    else:
+        text = f"The credit for your outage comes to {money(credit)}."
+    return _seg("notice.requested_amount", text)
+
+
 def evaluate(intent_name, question, retrieved, kb, resolution, facts):
     """Return grounded/declined claims, a decision, and the template reply.
 
     The reply is built from segments, each tagged with the claim (or notice) it
-    states, so a verifier can check every sentence against its source.
+    states, so a verifier can check every sentence against its source. A credit
+    question naming an amount gets a first segment comparing it to the computed
+    credit (R3 only) or declining to confirm it.
     """
+    result = _evaluate(intent_name, question, retrieved, kb, resolution, facts)
+    requested = extract_requested_amount(question, intent_name)
+    result["requested_amount"] = requested
+    if requested is not None:
+        result["segments"].insert(0, _requested_segment(requested, resolution, result["decision"]))
+        result["reply"] = " ".join(seg["text"] for seg in result["segments"])
+    return result
+
+
+def _evaluate(intent_name, question, retrieved, kb, resolution, facts):
     if intent_name == INFO:
         return _result([], "NO_QUESTION", [_seg("notice.info", "Thanks, noted.")], False)
     if intent_name not in INTENTS:
