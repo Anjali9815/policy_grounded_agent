@@ -11,6 +11,7 @@ import re
 
 INTENTS = {
     "credit_limit": {
+        "description": "Asks whether a refund/credit limit (e.g. $75) caps the credit, or how much the credit is.",
         "match": r"\$75|refund limit|\blimit\b",
         "expand": "service outage credit ceiling goodwill limit",
         "governing": "case",
@@ -30,6 +31,7 @@ INTENTS = {
         ],
     },
     "tax_treatment": {
+        "description": "Asks whether the credit affects taxes, surcharges or which charges it applies to.",
         "match": r"\btax|surcharge",
         "expand": "outage credit plan charge taxes surcharges",
         "governing": "case",
@@ -50,6 +52,7 @@ INTENTS = {
         ],
     },
     "request_deadline": {
+        "description": "Asks how long they have, or the deadline, to request the credit or dispute.",
         "match": r"how long|deadline",
         "expand": "outage credit request within days resolved resolution",
         "governing": "case",
@@ -64,6 +67,7 @@ INTENTS = {
         ],
     },
     "open_dispute": {
+        "description": "Wants to start or file a dispute about a charge on their bill.",
         "match": r"\bdispute (a|this|the) charge|\bneed to dispute",
         "expand": "file billing dispute identity line item",
         "governing": "R1",
@@ -83,6 +87,7 @@ INTENTS = {
 }
 INFO = "provide_information"
 UNKNOWN = "unknown"
+INFO_DESCRIPTION = "Only supplies account or case details (account number, dates, invoice), no question."
 
 # A statement with no question that only supplies account or case details.
 INFO_MATCH = r"\bNMB-\d+|card ending|went down on|wasn't back until|invoice dated"
@@ -128,15 +133,27 @@ def related(claim, retrieved, kb):
             if any(re.search(rf"\b{t}", _plain(kb[h["id"]]["body"]), re.I) for t in claim["topic"])]
 
 
+def _seg(claim_id, text):
+    return {"claim_id": claim_id, "text": text}
+
+
+def _result(claims, decision, segments, escalate):
+    return {"claims": claims, "decision": decision, "segments": segments,
+            "reply": " ".join(s["text"] for s in segments), "escalate": escalate}
+
+
 def evaluate(intent_name, question, retrieved, kb, resolution, facts):
-    """Return grounded/declined claims, a decision, and the reply text."""
+    """Return grounded/declined claims, a decision, and the template reply.
+
+    The reply is built from segments, each tagged with the claim (or notice) it
+    states, so a verifier can check every sentence against its source.
+    """
     if intent_name == INFO:
-        return {"claims": [], "decision": "NO_QUESTION",
-                "reply": "Thanks, noted.", "escalate": False}
+        return _result([], "NO_QUESTION", [_seg("notice.info", "Thanks, noted.")], False)
     if intent_name not in INTENTS:
-        return {"claims": [], "decision": "ESCALATE", "escalate": True,
-                "reply": "I don't have guidance I can rely on to answer that, so I've passed it to a "
-                         "Tier 2 Billing Specialist rather than guess."}
+        return _result([], "ESCALATE", [_seg(
+            "notice.unknown", "I don't have guidance I can rely on to answer that, so I've passed it to "
+                              "a Tier 2 Billing Specialist rather than guess.")], True)
 
     intent = INTENTS[intent_name]
     ctx = {
@@ -145,31 +162,32 @@ def evaluate(intent_name, question, retrieved, kb, resolution, facts):
         "deadline": resolution["request_deadline"],
         "resolved": facts["outage_end"]["value"].date() if facts["outage_end"]["value"] else None,
     }
-    claims, parts = [], []
+    claims, segments = [], []
     required = [c for c in intent["claims"] if not c.get("when") or re.search(c["when"], question, re.I)]
     for claim in required:
         ev = ground(claim, retrieved, kb)
         needs_case = intent["governing"] == "case" and resolution["governing_rule"] != "R3"
         if ev and not needs_case:
             claims.append({"id": claim["id"], "claim": claim["claim"], "status": "grounded", "evidence": ev})
-            parts.append(claim["reply"].format(quote=ev["quote"], quote_match=ev["match"],
-                                               doc=", ".join(ev["docs"]), **ctx))
+            segments.append(_seg(claim["id"], claim["reply"].format(
+                quote=ev["quote"], quote_match=ev["match"], doc=", ".join(ev["docs"]), **ctx)))
         else:
             reason = ("no retrieved article states this claim" if not ev
                       else "Rule 3 is not established for this case yet")
             claims.append({"id": claim["id"], "claim": claim["claim"], "status": "declined",
                            "reason": reason, "related_not_answering": related(claim, retrieved, kb)})
-            parts.append(claim.get("decline", f"I can't confirm that from our guidance yet "
-                                              f"({claim['claim']}), so I've escalated it to a Tier 2 "
-                                              f"Billing Specialist."))
+            segments.append(_seg(claim["id"], claim.get(
+                "decline", f"I can't confirm that from our guidance yet ({claim['claim']}), so I've "
+                           f"escalated it to a Tier 2 Billing Specialist.")))
 
     grounded = sum(c["status"] == "grounded" for c in claims)
     if not claims:
         decision = "ESCALATE"
     elif resolution["governing_rule"] == "R5" and intent["governing"] == "case":
         decision = "ESCALATE"
-        parts = ["Because of your account's dispute history or a fraud review, a Tier 2 Billing "
-                 "Specialist has to make this decision [R5]."]
+        segments = [_seg("notice.r5_escalation", "Because of your account's dispute history or a fraud "
+                                                 "review, a Tier 2 Billing Specialist has to make this "
+                                                 "decision [R5].")]
     elif grounded == len(claims):
         decision = "ANSWER"
     elif grounded:
@@ -178,11 +196,13 @@ def evaluate(intent_name, question, retrieved, kb, resolution, facts):
         decision = "ESCALATE"
 
     if intent_name == "credit_limit" and resolution["pending_verification"] and decision != "ESCALATE":
-        parts.append("Before the credit is applied, your account's dispute history and fraud review "
-                     "still need to be checked [R5]; that isn't shown in this conversation, so I'm not "
-                     "assuming it's clear.")
+        segments.append(_seg("notice.r5_pending",
+                             "Before the credit is applied, your account's dispute history and fraud "
+                             "review still need to be checked [R5]; that isn't shown in this "
+                             "conversation, so I'm not assuming it's clear."))
     if resolution["escalate"] and intent["governing"] == "case" and decision != "ESCALATE":
-        parts.append("This credit needs Tier 2 Billing Specialist approval before it is issued [R4].")
+        segments.append(_seg("notice.r4_approval",
+                             "This credit needs Tier 2 Billing Specialist approval before it is issued [R4]."))
 
-    return {"claims": claims, "decision": decision, "reply": " ".join(parts),
-            "escalate": decision in ("PARTIAL", "ESCALATE") or resolution["escalate"]}
+    return _result(claims, decision, segments,
+                   decision in ("PARTIAL", "ESCALATE") or resolution["escalate"])

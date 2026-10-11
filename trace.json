@@ -3,26 +3,100 @@
     "time": "14:02",
     "question": "Hi, I need to dispute a charge on my latest bill. My service was out for almost two weeks last month and I still got charged the full $225.00 like nothing happened.",
     "intent": "open_dispute",
+    "intent_source": "rules",
+    "route": {
+      "status": "routed",
+      "categories": [
+        "Refund Eligibility",
+        "Billing Dispute Process",
+        "Service-Outage Credit Policy"
+      ],
+      "source": "keywords",
+      "reason": "keyword match",
+      "case_context": null,
+      "scores": [
+        {
+          "category": "Refund Eligibility",
+          "score": 3.283,
+          "matched": [
+            "bill",
+            "month"
+          ],
+          "in_scope": true
+        },
+        {
+          "category": "Billing Dispute Process",
+          "score": 2.708,
+          "matched": [
+            "bill",
+            "disput"
+          ],
+          "in_scope": true
+        },
+        {
+          "category": "Service-Outage Credit Policy",
+          "score": 2.079,
+          "matched": [
+            "servic"
+          ],
+          "in_scope": true
+        },
+        {
+          "category": "Escalation Rules",
+          "score": 1.504,
+          "matched": [
+            "disput"
+          ],
+          "in_scope": true
+        },
+        {
+          "category": "Account & Billing Basics",
+          "score": 1.204,
+          "matched": [
+            "bill"
+          ],
+          "in_scope": true
+        }
+      ],
+      "articles": [
+        "KB-1001",
+        "KB-1002",
+        "KB-1004",
+        "KB-1005"
+      ],
+      "rules": [
+        "R1",
+        "R2",
+        "R3"
+      ]
+    },
+    "tokens": {
+      "routed_context": 1390,
+      "full_context": 2807,
+      "llm_input": 0,
+      "llm_output": 0,
+      "llm_calls": []
+    },
     "retrieved": [
       {
         "id": "KB-1001",
         "title": "How to File a Billing Dispute",
-        "score": 14.442
+        "score": 13.339
       },
       {
-        "id": "KB-1006",
-        "title": "When We Escalate a Billing Request to Tier 2",
-        "score": 5.991
-      },
-      {
-        "id": "KB-1004",
-        "title": "Service-Outage Credits: Eligibility & Credit Calculation",
-        "score": 4.675
+        "id": "KB-1002",
+        "title": "Refund Eligibility & Goodwill Credit Limits",
+        "score": 4.172
       },
       {
         "id": "KB-1005",
         "title": "How to Request a Service-Outage Credit",
-        "score": 4.453
+        "score": 3.289
+      },
+      {
+        "id": "KB-1004",
+        "title": "Service-Outage Credits: Eligibility & Credit Calculation",
+        "score": 3.208
       }
     ],
     "excluded_by_scope": [
@@ -73,6 +147,17 @@
       }
     ],
     "not_applied": [],
+    "checks_view": {
+      "full": true,
+      "lines": [
+        "[unverified] R5.prior_dispute_within_90_days: no second dispute within 90 days of a resolved one: account dispute history not in transcript",
+        "[unverified] R5.fraud_indicators: no fraud indicators: fraud review flags not in transcript",
+        "[unverified] R1.within_60_days_of_statement: not yet established at 14:02 (known from 14:06)",
+        "[unverified] R3.noc_ticket: not yet established at 14:02 (known from 14:08)",
+        "[unverified] R3.outage_over_4_hours: outage dates not established",
+        "[unverified] R3.within_30_days_of_resolution: outage dates not established"
+      ]
+    },
     "credit": null,
     "formula": null,
     "request_deadline": null,
@@ -121,33 +206,72 @@
       }
     ],
     "decision": "ANSWER",
+    "escalate": false,
+    "segments": [
+      {
+        "claim_id": "verify_identity",
+        "text": "I can open a dispute for you. First: Confirm the account holder's identity (name, account number, and either the last 4 digits of the payment method on file or the account PIN) [KB-1001]."
+      },
+      {
+        "claim_id": "identify_line_item",
+        "text": "Then: Identify the exact line item being disputed (date, amount, description as shown on the invoice) [KB-1001]."
+      }
+    ],
     "reply": "I can open a dispute for you. First: Confirm the account holder's identity (name, account number, and either the last 4 digits of the payment method on file or the account PIN) [KB-1001]. Then: Identify the exact line item being disputed (date, amount, description as shown on the invoice) [KB-1001].",
-    "escalate": false
+    "reply_source": "template",
+    "verifier": {
+      "checked": "template",
+      "passed": true,
+      "errors": [],
+      "unsupported_values": []
+    }
   },
   {
     "time": "14:04",
     "question": "Account is NMB-7745213, and the card ending is 4471.",
     "intent": "provide_information",
+    "intent_source": "rules",
+    "route": {
+      "status": "routed",
+      "categories": [
+        "Account & Billing Basics"
+      ],
+      "source": "keywords",
+      "reason": "keyword match",
+      "case_context": null,
+      "scores": [
+        {
+          "category": "Account & Billing Basics",
+          "score": 2.079,
+          "matched": [
+            "account"
+          ],
+          "in_scope": true
+        }
+      ],
+      "articles": [
+        "KB-1003",
+        "KB-1010"
+      ],
+      "rules": []
+    },
+    "tokens": {
+      "routed_context": 295,
+      "full_context": 2807,
+      "llm_input": 0,
+      "llm_output": 0,
+      "llm_calls": []
+    },
     "retrieved": [
-      {
-        "id": "KB-1002",
-        "title": "Refund Eligibility & Goodwill Credit Limits",
-        "score": 0.537
-      },
-      {
-        "id": "KB-1001",
-        "title": "How to File a Billing Dispute",
-        "score": 0.518
-      },
-      {
-        "id": "KB-1007",
-        "title": "Repeat Disputes & Fraud Review",
-        "score": 0.508
-      },
       {
         "id": "KB-1010",
         "title": "Mid-Cycle Plan Change Proration",
-        "score": 0.5
+        "score": 0.264
+      },
+      {
+        "id": "KB-1003",
+        "title": "Understanding Your Nimbus Wireless Bill",
+        "score": 0.257
       }
     ],
     "excluded_by_scope": [
@@ -196,6 +320,7 @@
       }
     ],
     "not_applied": [],
+    "checks_view": null,
     "credit": null,
     "formula": null,
     "request_deadline": null,
@@ -203,33 +328,111 @@
     "escalation_reasons": [],
     "claims": [],
     "decision": "NO_QUESTION",
+    "escalate": false,
+    "segments": [
+      {
+        "claim_id": "notice.info",
+        "text": "Thanks, noted."
+      }
+    ],
     "reply": "Thanks, noted.",
-    "escalate": false
+    "reply_source": "template",
+    "verifier": {
+      "checked": "template",
+      "passed": true,
+      "errors": [],
+      "unsupported_values": []
+    }
   },
   {
     "time": "14:06",
     "question": "Service went down on September 10th at 6 AM and wasn't back until September 21st at 6 AM — all three lines, totally dead, no calls or data. I'm disputing the full $225.00 recurring charge on the invoice dated October 1st.",
     "intent": "provide_information",
+    "intent_source": "rules",
+    "route": {
+      "status": "routed",
+      "categories": [
+        "Billing Dispute Process",
+        "Account & Billing Basics",
+        "Service-Outage Credit Policy"
+      ],
+      "source": "keywords",
+      "reason": "keyword match",
+      "case_context": null,
+      "scores": [
+        {
+          "category": "Billing Dispute Process",
+          "score": 3.584,
+          "matched": [
+            "disput",
+            "lin"
+          ],
+          "in_scope": true
+        },
+        {
+          "category": "Account & Billing Basics",
+          "score": 2.079,
+          "matched": [
+            "invoic"
+          ],
+          "in_scope": true
+        },
+        {
+          "category": "Service-Outage Credit Policy",
+          "score": 2.079,
+          "matched": [
+            "servic"
+          ],
+          "in_scope": true
+        },
+        {
+          "category": "Escalation Rules",
+          "score": 1.504,
+          "matched": [
+            "disput"
+          ],
+          "in_scope": true
+        }
+      ],
+      "articles": [
+        "KB-1001",
+        "KB-1003",
+        "KB-1004",
+        "KB-1005",
+        "KB-1010"
+      ],
+      "rules": [
+        "R1",
+        "R3"
+      ]
+    },
+    "tokens": {
+      "routed_context": 1343,
+      "full_context": 2807,
+      "llm_input": 0,
+      "llm_output": 0,
+      "llm_calls": []
+    },
     "retrieved": [
       {
         "id": "KB-1005",
         "title": "How to Request a Service-Outage Credit",
-        "score": 10.209
+        "score": 7.849
       },
       {
         "id": "KB-1004",
         "title": "Service-Outage Credits: Eligibility & Credit Calculation",
-        "score": 6.275
+        "score": 4.357
       },
       {
         "id": "KB-1003",
         "title": "Understanding Your Nimbus Wireless Bill",
-        "score": 3.733
+        "score": 2.103
       },
       {
-        "id": "KB-1006",
-        "title": "When We Escalate a Billing Request to Tier 2",
-        "score": 3.191
+        "id": "KB-1001",
+        "title": "How to File a Billing Dispute",
+        "score": 1.409
       }
     ],
     "excluded_by_scope": [
@@ -278,6 +481,7 @@
       }
     ],
     "not_applied": [],
+    "checks_view": null,
     "credit": null,
     "formula": null,
     "request_deadline": null,
@@ -285,33 +489,95 @@
     "escalation_reasons": [],
     "claims": [],
     "decision": "NO_QUESTION",
+    "escalate": false,
+    "segments": [
+      {
+        "claim_id": "notice.info",
+        "text": "Thanks, noted."
+      }
+    ],
     "reply": "Thanks, noted.",
-    "escalate": false
+    "reply_source": "template",
+    "verifier": {
+      "checked": "template",
+      "passed": true,
+      "errors": [],
+      "unsupported_values": []
+    }
   },
   {
     "time": "14:09",
     "question": "Okay, but isn't your refund limit only $75? I saw something like that in your terms once. So you can only give me $75 back for this, right?",
     "intent": "credit_limit",
+    "intent_source": "rules",
+    "route": {
+      "status": "routed",
+      "categories": [
+        "Refund Eligibility",
+        "Service-Outage Credit Policy"
+      ],
+      "source": "keywords",
+      "reason": "keyword match",
+      "case_context": null,
+      "scores": [
+        {
+          "category": "Refund Eligibility",
+          "score": 3.584,
+          "matched": [
+            "75",
+            "refund"
+          ],
+          "in_scope": true
+        },
+        {
+          "category": "Service-Outage Credit Policy",
+          "score": 2.079,
+          "matched": [
+            "limit"
+          ],
+          "in_scope": true
+        },
+        {
+          "category": "Escalation Rules",
+          "score": 1.504,
+          "matched": [
+            "75"
+          ],
+          "in_scope": true
+        }
+      ],
+      "articles": [
+        "KB-1002",
+        "KB-1004",
+        "KB-1005"
+      ],
+      "rules": [
+        "R2",
+        "R3"
+      ]
+    },
+    "tokens": {
+      "routed_context": 1071,
+      "full_context": 2807,
+      "llm_input": 0,
+      "llm_output": 0,
+      "llm_calls": []
+    },
     "retrieved": [
       {
         "id": "KB-1002",
         "title": "Refund Eligibility & Goodwill Credit Limits",
-        "score": 13.563
+        "score": 6.566
       },
       {
         "id": "KB-1004",
         "title": "Service-Outage Credits: Eligibility & Credit Calculation",
-        "score": 9.74
-      },
-      {
-        "id": "KB-1006",
-        "title": "When We Escalate a Billing Request to Tier 2",
-        "score": 7.761
+        "score": 4.43
       },
       {
         "id": "KB-1005",
         "title": "How to Request a Service-Outage Credit",
-        "score": 1.764
+        "score": 0.85
       }
     ],
     "excluded_by_scope": [
@@ -394,6 +660,21 @@
         "reason": "the R1 60-day window (2026-11-30) is not the governing deadline for an outage credit; R3 sets 2026-10-21"
       }
     ],
+    "checks_view": {
+      "full": false,
+      "lines": [
+        "[    passed] R1.within_60_days_of_statement: statement 2026-10-01, window ends 2026-11-30, chat 2026-10-05",
+        "[    passed] R3.noc_ticket: OUT-58823 ([14:08] Agent)",
+        "[    passed] R3.outage_over_4_hours: 2026-09-10 06:00:00 to 2026-09-21 06:00:00 = 264 hours",
+        "[    passed] R3.within_30_days_of_resolution: resolved 2026-09-21, deadline 2026-10-21, requested 2026-10-05",
+        "[    passed] R4b.credit_not_over_300: $82.50 vs $300.00",
+        "[    passed] R4b.outage_not_over_30_days: 11 days vs 30",
+        "[    passed] R4b.ticket_verified: OUT-58823 confirmed by agent lookup",
+        "[not applied] R2: R3 is the more specific rule for a NOC-confirmed outage (R0); the R2 $75.00 goodwill ceiling does not cap this credit",
+        "[not applied] R4a: R4(a) applies only to R2 credits; comparing an R3 credit to $75.00 is a misapplication (R4 note)",
+        "[not applied] R1: the R1 60-day window (2026-11-30) is not the governing deadline for an outage credit; R3 sets 2026-10-21"
+      ]
+    },
     "credit": "82.50",
     "formula": "($225.00 ÷ 30) × 11 full days = $82.50",
     "request_deadline": "2026-10-21",
@@ -445,33 +726,149 @@
       }
     ],
     "decision": "ANSWER",
+    "escalate": false,
+    "segments": [
+      {
+        "claim_id": "outage_credit_not_capped",
+        "text": "The $75.00 limit is not the one that applies to an outage credit. Our policy says: \"This credit applies to the recurring plan charge only and is issued separately from, and is not limited by, the standard $75.00 goodwill credit ceiling described in KB-1002\" [KB-1004]."
+      },
+      {
+        "claim_id": "outage_credit_formula",
+        "text": "For a confirmed outage the credit is (current monthly recurring charge ÷ 30) × number of full days without service [KB-1004]. With ticket OUT-58823 that is ($225.00 ÷ 30) × 11 full days = $82.50, under Rule 3."
+      },
+      {
+        "claim_id": "notice.r5_pending",
+        "text": "Before the credit is applied, your account's dispute history and fraud review still need to be checked [R5]; that isn't shown in this conversation, so I'm not assuming it's clear."
+      }
+    ],
     "reply": "The $75.00 limit is not the one that applies to an outage credit. Our policy says: \"This credit applies to the recurring plan charge only and is issued separately from, and is not limited by, the standard $75.00 goodwill credit ceiling described in KB-1002\" [KB-1004]. For a confirmed outage the credit is (current monthly recurring charge ÷ 30) × number of full days without service [KB-1004]. With ticket OUT-58823 that is ($225.00 ÷ 30) × 11 full days = $82.50, under Rule 3. Before the credit is applied, your account's dispute history and fraud review still need to be checked [R5]; that isn't shown in this conversation, so I'm not assuming it's clear.",
-    "escalate": false
+    "reply_source": "template",
+    "verifier": {
+      "checked": "template",
+      "passed": true,
+      "errors": [],
+      "unsupported_values": []
+    }
   },
   {
     "time": "14:11",
     "question": "Sure, no rush. While you're looking into that — does whatever credit I end up getting also reduce the taxes and regulatory surcharges I paid during those eleven days, or is it only applied against the plan charge itself?",
     "intent": "tax_treatment",
+    "intent_source": "rules",
+    "route": {
+      "status": "routed",
+      "categories": [
+        "Account & Billing Basics",
+        "Service-Outage Credit Policy"
+      ],
+      "source": "keywords",
+      "reason": "keyword match",
+      "case_context": {
+        "rule": "R3",
+        "added": [
+          "Service-Outage Credit Policy"
+        ]
+      },
+      "scores": [
+        {
+          "category": "Account & Billing Basics",
+          "score": 7.25,
+          "matched": [
+            "day",
+            "plan",
+            "surcharg",
+            "tax"
+          ],
+          "in_scope": true
+        },
+        {
+          "category": "Escalation Rules",
+          "score": 1.887,
+          "matched": [
+            "credit",
+            "day"
+          ],
+          "in_scope": true
+        },
+        {
+          "category": "Service-Outage Credit Policy",
+          "score": 1.887,
+          "matched": [
+            "credit",
+            "day"
+          ],
+          "in_scope": true
+        },
+        {
+          "category": "Billing Dispute Process",
+          "score": 1.012,
+          "matched": [
+            "day"
+          ],
+          "in_scope": true
+        },
+        {
+          "category": "Device Protection (not a billing-dispute credit)",
+          "score": 0.875,
+          "matched": [
+            "credit"
+          ],
+          "in_scope": false
+        },
+        {
+          "category": "Refund Eligibility",
+          "score": 0.875,
+          "matched": [
+            "credit"
+          ],
+          "in_scope": true
+        },
+        {
+          "category": "Retention Offers (not a billing-dispute credit)",
+          "score": 0.875,
+          "matched": [
+            "credit"
+          ],
+          "in_scope": false
+        }
+      ],
+      "articles": [
+        "KB-1003",
+        "KB-1004",
+        "KB-1005",
+        "KB-1010"
+      ],
+      "rules": [
+        "R3"
+      ]
+    },
+    "tokens": {
+      "routed_context": 1024,
+      "full_context": 2807,
+      "llm_input": 0,
+      "llm_output": 0,
+      "llm_calls": []
+    },
     "retrieved": [
       {
         "id": "KB-1003",
         "title": "Understanding Your Nimbus Wireless Bill",
-        "score": 21.02
-      },
-      {
-        "id": "KB-1010",
-        "title": "Mid-Cycle Plan Change Proration",
-        "score": 8.474
+        "score": 12.636
       },
       {
         "id": "KB-1004",
         "title": "Service-Outage Credits: Eligibility & Credit Calculation",
-        "score": 6.924
+        "score": 6.371
       },
       {
         "id": "KB-1005",
         "title": "How to Request a Service-Outage Credit",
-        "score": 4.457
+        "score": 5.642
+      },
+      {
+        "id": "KB-1010",
+        "title": "Mid-Cycle Plan Change Proration",
+        "score": 4.448
       }
     ],
     "excluded_by_scope": [
@@ -554,6 +951,10 @@
         "reason": "the R1 60-day window (2026-11-30) is not the governing deadline for an outage credit; R3 sets 2026-10-21"
       }
     ],
+    "checks_view": {
+      "full": false,
+      "lines": []
+    },
     "credit": "82.50",
     "formula": "($225.00 ÷ 30) × 11 full days = $82.50",
     "request_deadline": "2026-10-21",
@@ -594,33 +995,75 @@
       }
     ],
     "decision": "PARTIAL",
-    "reply": "The outage credit is calculated on your plan charge: \"This credit applies to the recurring plan charge only and is issued separately from, and is not limited by, the standard $75.00 goodwill credit ceiling described in KB-1002\" [KB-1004]. Our guidance doesn't say whether the credit also reduces the taxes and regulatory surcharges, so I've escalated that part to a Tier 2 Billing Specialist rather than guess.",
-    "escalate": true
+    "escalate": true,
+    "segments": [
+      {
+        "claim_id": "credit_plan_charge_only",
+        "text": "The outage credit is calculated on your plan charge: \"This credit applies to the recurring plan charge only and is issued separately from, and is not limited by, the standard $75.00 goodwill credit ceiling described in KB-1002\" [KB-1004]."
+      },
+      {
+        "claim_id": "credit_tax_treatment",
+        "text": "Our guidance doesn't say whether the credit also reduces the taxes and regulatory surcharges, so I've escalated that question to a Tier 2 Billing Specialist rather than guess."
+      }
+    ],
+    "reply": "The outage credit is calculated on your plan charge: \"This credit applies to the recurring plan charge only and is issued separately from, and is not limited by, the standard $75.00 goodwill credit ceiling described in KB-1002\" [KB-1004]. Our guidance doesn't say whether the credit also reduces the taxes and regulatory surcharges, so I've escalated that question to a Tier 2 Billing Specialist rather than guess.",
+    "reply_source": "template",
+    "verifier": {
+      "checked": "template",
+      "passed": true,
+      "errors": [],
+      "unsupported_values": []
+    }
   },
   {
     "time": "14:13",
     "question": "Sounds good. One more thing while I have you — how long do I actually have to submit a request like this after an outage gets fixed? Just want to make sure I'm not about to miss some deadline.",
     "intent": "request_deadline",
+    "intent_source": "rules",
+    "route": {
+      "status": "routed",
+      "categories": [
+        "Service-Outage Credit Policy"
+      ],
+      "source": "keywords",
+      "reason": "keyword match",
+      "case_context": null,
+      "scores": [
+        {
+          "category": "Service-Outage Credit Policy",
+          "score": 4.159,
+          "matched": [
+            "outag",
+            "request"
+          ],
+          "in_scope": true
+        }
+      ],
+      "articles": [
+        "KB-1004",
+        "KB-1005"
+      ],
+      "rules": [
+        "R3"
+      ]
+    },
+    "tokens": {
+      "routed_context": 729,
+      "full_context": 2807,
+      "llm_input": 0,
+      "llm_output": 0,
+      "llm_calls": []
+    },
     "retrieved": [
       {
         "id": "KB-1005",
         "title": "How to Request a Service-Outage Credit",
-        "score": 10.336
-      },
-      {
-        "id": "KB-1006",
-        "title": "When We Escalate a Billing Request to Tier 2",
-        "score": 8.832
+        "score": 4.18
       },
       {
         "id": "KB-1004",
         "title": "Service-Outage Credits: Eligibility & Credit Calculation",
-        "score": 8.826
-      },
-      {
-        "id": "KB-1001",
-        "title": "How to File a Billing Dispute",
-        "score": 6.471
+        "score": 4.132
       }
     ],
     "excluded_by_scope": [
@@ -703,6 +1146,10 @@
         "reason": "the R1 60-day window (2026-11-30) is not the governing deadline for an outage credit; R3 sets 2026-10-21"
       }
     ],
+    "checks_view": {
+      "full": false,
+      "lines": []
+    },
     "credit": "82.50",
     "formula": "($225.00 ÷ 30) × 11 full days = $82.50",
     "request_deadline": "2026-10-21",
@@ -740,7 +1187,20 @@
       }
     ],
     "decision": "ANSWER",
+    "escalate": false,
+    "segments": [
+      {
+        "claim_id": "outage_request_window",
+        "text": "You need to request it within 30 days of the ticket's resolution date [KB-1005, KB-1004]. Your outage was resolved on 2026-09-21, so the deadline is 2026-10-21. The 60-day billing-dispute window from your statement date is not the deadline for an outage credit [R0, R1]."
+      }
+    ],
     "reply": "You need to request it within 30 days of the ticket's resolution date [KB-1005, KB-1004]. Your outage was resolved on 2026-09-21, so the deadline is 2026-10-21. The 60-day billing-dispute window from your statement date is not the deadline for an outage credit [R0, R1].",
-    "escalate": false
+    "reply_source": "template",
+    "verifier": {
+      "checked": "template",
+      "passed": true,
+      "errors": [],
+      "unsupported_values": []
+    }
   }
 ]

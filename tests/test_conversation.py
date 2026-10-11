@@ -53,7 +53,7 @@ class LoaderAndFacts(unittest.TestCase):
 class Conversation(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.turns = {t["time"]: t for t in run()}
+        cls.turns = {t["time"]: t for t in run(use_llm=False)}
 
     def test_1409_credit_question(self):
         t = self.turns["14:09"]
@@ -131,7 +131,7 @@ class WrappedTranscript(unittest.TestCase):
 class UnseenQuestions(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.agent = Agent()
+        cls.agent = Agent(use_llm=False)
 
     def test_retention_credit_not_answered_from_kb_1008(self):
         t = self.agent.answer("Can I get a retention credit instead?")

@@ -1,36 +1,41 @@
 # Policy-Grounded Billing Dispute Agent
 
 A prototype billing-dispute agent for Cresta Agentic Assist. It answers a customer only when a knowledge-base article explicitly supports the answer, and escalates to Tier 2 otherwise.
-It picks the governing policy rule deterministically and does not need an LLM to run.
+It is a LangGraph multi-agent workflow. Policy selection is always deterministic, and LLM steps are optional (`USE_LLM=1`).
 
-**Requirements:** Python 3.9+, no dependencies.
+**Requirements:** Python 3.10+. Install with `pip install -r requirements.txt`, then `cp .env.example .env`. With `USE_LLM=0` (the default) it needs no keys.
 
 **Run:** `python run.py` prints a trace for each turn and writes `trace.json`.
-**Tests:** `python -m unittest discover tests`
+**Tests:** `python -m unittest discover tests` (no keys needed; LLMs are faked).
+**LangSmith eval:** `python scripts/eval_langsmith.py` (runs only if `LANGSMITH_API_KEY` is set).
 
-## Pipeline
-1. **facts**: extracts case facts from the transcript, noting each fact's source and the time it became known. Facts the transcript doesn't contain (dispute history, fraud flags) are marked `unverified` and never assumed.
-2. **retriever**: drops out-of-scope articles (`scope: not_billing_dispute`), then ranks the rest with BM25.
-3. **resolver**: checks R5 (repeat dispute / fraud) first, and R5 overrides everything. If every R3 outage condition holds, R3 governs instead of R2 (citing R0). An R3 credit escalates only under R4(b) and is never compared to the $75 cap.
-4. **gate**: each question maps to an intent with required claims. A claim is answered only if a retrieved article states it. Questions that match no intent escalate.
-5. **reply**: templates filled only from quoted evidence and computed values, with citations such as `[KB-1004]` and `[R0, R1]`.
+## Agents (graph nodes)
+`policy_agent` → `router_agent` → `intent_agent` → `retrieval_agent` → `gate_agent` → `responder_agent` → `verifier_agent`. Out-of-scope or unroutable turns, and `unknown` intents, go to `escalate_agent` → `verifier_agent`.
+- **policy_agent**: the deterministic resolver, with no LLM. Checks R5 first, and R3 over R2 via R0. It runs first because it needs only case facts, not the KB.
+- **router_agent**: scores KB categories from frontmatter (`category`, `scope`, `governs`, `tags`). Out of scope escalates with no LLM call. Only an ambiguous match calls the small model (`ROUTER_MODEL`, Haiku 5.5). An in-scope route also gets the category governing the case's current rule. Later agents see only the routed articles and the rules they govern.
+- **intent_agent**: Claude picks from the fixed intent list or `unknown` (a JSON-schema enum). Falls back to keyword rules.
+- **retrieval_agent**: BM25 over the routed articles only.
+- **gate_agent**: grounds each claim in a retrieved article and builds the template reply as claim-tagged segments.
+- **responder_agent**: Claude rephrases the segments using only the cited evidence and computed facts.
+- **verifier_agent**: checks every number, date and $ amount against the evidence or computed facts, and checks that every segment maps to a claim, keeps its citation and keeps any Tier 2 escalation. On failure the template reply is used instead.
+
+`CaseMemory` sits in the graph state and carries facts, checks and per-turn decisions (with routed categories) across turns.
 
 ## Layout
 ```
-loader.py      frontmatter parser for data/kb and data/policy
-facts.py       transcript parsing and fact extraction
-retriever.py   scope filter + BM25
-resolver.py    rule selection, checks, credit, escalation
-gate.py        intents, claim grounding, reply templates
-run.py         walks customer turns, prints trace, writes trace.json
-data/kb/       KB-1001..KB-1010 (one article per file)
-data/policy/   R0_precedence, R1..R5 (one rule per file)
-data/raw/      original policy, KB export and chat transcript
-tests/         expected outcomes and unseen-question tests
+graph.py       LangGraph workflow (nodes, routing)     memory.py     CaseMemory
+llm.py         Claude calls (intent, responder)        verifier.py   reply verification
+facts.py       transcript facts                        retriever.py  scope filter + BM25
+resolver.py    rule selection, credit, escalation      gate.py       intents, grounding, templates
+loader.py      frontmatter parser                      config.py     .env settings
+router.py      frontmatter category routing
+run.py         runs the transcript, prints the trace   eval_cases.py shared eval cases
+data/kb, data/policy   one article / rule per file     data/raw      original sources
+data/eval_cases.json   expected decision + rule        scripts/      LangSmith eval
 ```
 
 ## Reading the trace
-Each customer turn shows the question, intent, retrieved articles with scores, the governing rule, the checks and the claims. The checks block prints in full once; later turns show only the checks that changed. Each check is `passed`, `failed` or `unverified`, and `not applied` lines explain rules that were deliberately set aside.
+Each turn shows the route (categories, keywords or LLM, any category added from the case rule), the token count (routed context vs the full KB, plus LLM input/output tokens), the intent (and whether rules or the LLM picked it), retrieved articles with scores, the governing rule, the checks (in full once, then only what changed), the claims, the verifier result and the reply with its source (`template`, `llm` or `template (verifier fallback)`).
 
 | Decision | Meaning |
 |---|---|

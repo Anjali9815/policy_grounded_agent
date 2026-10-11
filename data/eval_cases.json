@@ -1,0 +1,11 @@
+[
+  {"id": "turn-1402-open-dispute", "turn": "14:02", "expected_decision": "ANSWER", "expected_rule": "R1"},
+  {"id": "turn-1404-identity", "turn": "14:04", "expected_decision": "NO_QUESTION", "expected_rule": null},
+  {"id": "turn-1406-outage-details", "turn": "14:06", "expected_decision": "NO_QUESTION", "expected_rule": null},
+  {"id": "turn-1409-credit-limit", "turn": "14:09", "expected_decision": "ANSWER", "expected_rule": "R3"},
+  {"id": "turn-1411-taxes", "turn": "14:11", "expected_decision": "PARTIAL", "expected_rule": "R3"},
+  {"id": "turn-1413-deadline", "turn": "14:13", "expected_decision": "ANSWER", "expected_rule": "R3"},
+  {"id": "unseen-retention-credit", "question": "Can I get a retention credit instead?", "expected_decision": "ESCALATE", "expected_rule": null},
+  {"id": "unseen-installments", "question": "Can I pay this bill in installments?", "expected_decision": "ESCALATE", "expected_rule": null},
+  {"id": "unseen-credit-taxed", "question": "Is the outage credit taxed?", "expected_decision": "ESCALATE", "expected_rule": "R3"}
+]
