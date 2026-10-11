@@ -36,3 +36,7 @@ LangGraph agents: policy (deterministic) → router (OKF frontmatter) → intent
 5. Known gaps: the agent tracks **one governing rule per case**, so a customer with two disputes (an outage plus a duplicate charge) needs per dispute tracks to avoid blending; cross check customer dates against NOC ticket dates; **[IF NOT DONE]** answer the customer's requested amount directly.
 
 *Data note: the KB export says 9 articles but contains 10.*
+
+Known gap, found by my own two dispute test: the agent tracks one governing rule per case. With an
+outage plus a duplicate charge, it wrongly told the customer the $75 cap didn't apply to the
+duplicate charge (it applied R3 to an R2 item). Fix: per dispute tracks in case memory.
