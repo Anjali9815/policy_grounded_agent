@@ -4,6 +4,7 @@
     "question": "Hi, I need to dispute a charge on my latest bill. My service was out for almost two weeks last month and I still got charged the full $225.00 like nothing happened.",
     "intent": "open_dispute",
     "intent_source": "rules",
+    "llm_intent": null,
     "route": {
       "status": "routed",
       "categories": [
@@ -224,6 +225,10 @@
       "passed": true,
       "errors": [],
       "unsupported_values": []
+    },
+    "llm_breaker": {
+      "open": false,
+      "reason": null
     }
   },
   {
@@ -231,6 +236,7 @@
     "question": "Account is NMB-7745213, and the card ending is 4471.",
     "intent": "provide_information",
     "intent_source": "rules",
+    "llm_intent": null,
     "route": {
       "status": "routed",
       "categories": [
@@ -342,6 +348,10 @@
       "passed": true,
       "errors": [],
       "unsupported_values": []
+    },
+    "llm_breaker": {
+      "open": false,
+      "reason": null
     }
   },
   {
@@ -349,6 +359,7 @@
     "question": "Service went down on September 10th at 6 AM and wasn't back until September 21st at 6 AM — all three lines, totally dead, no calls or data. I'm disputing the full $225.00 recurring charge on the invoice dated October 1st.",
     "intent": "provide_information",
     "intent_source": "rules",
+    "llm_intent": null,
     "route": {
       "status": "routed",
       "categories": [
@@ -503,6 +514,10 @@
       "passed": true,
       "errors": [],
       "unsupported_values": []
+    },
+    "llm_breaker": {
+      "open": false,
+      "reason": null
     }
   },
   {
@@ -510,6 +525,7 @@
     "question": "Okay, but isn't your refund limit only $75? I saw something like that in your terms once. So you can only give me $75 back for this, right?",
     "intent": "credit_limit",
     "intent_source": "rules",
+    "llm_intent": null,
     "route": {
       "status": "routed",
       "categories": [
@@ -748,6 +764,10 @@
       "passed": true,
       "errors": [],
       "unsupported_values": []
+    },
+    "llm_breaker": {
+      "open": false,
+      "reason": null
     }
   },
   {
@@ -755,6 +775,7 @@
     "question": "Sure, no rush. While you're looking into that — does whatever credit I end up getting also reduce the taxes and regulatory surcharges I paid during those eleven days, or is it only applied against the plan charge itself?",
     "intent": "tax_treatment",
     "intent_source": "rules",
+    "llm_intent": null,
     "route": {
       "status": "routed",
       "categories": [
@@ -1013,6 +1034,10 @@
       "passed": true,
       "errors": [],
       "unsupported_values": []
+    },
+    "llm_breaker": {
+      "open": false,
+      "reason": null
     }
   },
   {
@@ -1020,6 +1045,7 @@
     "question": "Sounds good. One more thing while I have you — how long do I actually have to submit a request like this after an outage gets fixed? Just want to make sure I'm not about to miss some deadline.",
     "intent": "request_deadline",
     "intent_source": "rules",
+    "llm_intent": null,
     "route": {
       "status": "routed",
       "categories": [
@@ -1201,6 +1227,10 @@
       "passed": true,
       "errors": [],
       "unsupported_values": []
+    },
+    "llm_breaker": {
+      "open": false,
+      "reason": null
     }
   }
 ]

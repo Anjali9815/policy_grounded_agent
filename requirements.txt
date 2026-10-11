@@ -1,4 +1,5 @@
 langgraph>=1.2,<2
 python-dotenv>=1.0
 anthropic>=1.13,<2
+groq>=1.7,<2
 langsmith>=0.14

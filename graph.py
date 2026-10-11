@@ -9,8 +9,10 @@ policy_agent runs first: it needs only the case facts (no KB) and gives the
 router the case's governing rule. router_agent narrows the KB to the routed
 categories; retrieval, gate and responder see only those articles and the rules
 they govern. LLMs (router fallback, intent, responder) are optional and every
-one falls back to the deterministic path; verifier_agent replaces an LLM reply
-that fails verification with the template reply.
+one falls back to the deterministic path. The first LLM failure trips a circuit
+breaker that disables every LLM for the rest of the run. verifier_agent replaces
+an LLM reply that fails verification with the template reply (a verification
+failure is not an LLM failure and does not trip the breaker).
 """
 from typing import TypedDict
 
@@ -19,7 +21,7 @@ from langgraph.graph import END, START, StateGraph
 import facts as facts_mod
 import gate
 import resolver
-from llm import OUT_OF_SCOPE, LLMError
+from llm import OUT_OF_SCOPE, CircuitBreaker, LLMError
 from memory import CaseMemory
 from retriever import Retriever
 from router import Router, approx_tokens
@@ -29,6 +31,7 @@ from verifier import verify
 class TurnState(TypedDict, total=False):
     question: str
     time: str
+    fact_overrides: dict
     memory: CaseMemory
     known: dict
     resolution: dict
@@ -37,11 +40,15 @@ class TurnState(TypedDict, total=False):
     routed_rules: dict
     intent: str
     intent_source: str
+    llm_intent: str
     retrieved: list
     gate: dict
     segments: list
     reply_source: str
     verifier: dict
+
+
+RETRIEVE_K = 4
 
 
 def governing_for(intent_name, resolution):
@@ -68,26 +75,36 @@ def context_tokens(docs):
     return sum(approx_tokens(d["body"]) for d in docs.values())
 
 
-def build(kb, policy, all_facts, llm=None, router_llm=None):
+def build(kb, policy, all_facts, llm=None, router_llm=None, breaker=None):
     router = Router(kb)
+    breaker = breaker or CircuitBreaker()
+
+    def disabled(client):
+        return " (llm disabled)" if client is not None and breaker.open else ""
     intents = {name: i["description"] for name, i in gate.INTENTS.items()}
     intents[gate.INFO] = gate.INFO_DESCRIPTION
 
     def policy_agent(state):
-        known = facts_mod.as_of(all_facts, state["time"])
+        scenario = facts_mod.apply_overrides(all_facts, state.get("fact_overrides"))
+        known = facts_mod.as_of(scenario, state["time"])
         state["memory"].update_facts(known)
         return {"known": known, "resolution": resolver.resolve(known)}
 
     def router_agent(state):
         route = router.route(state["question"])
-        if route["status"] == "ambiguous" and router_llm is not None:
+        small = breaker.allow(router_llm)
+        if route["status"] == "ambiguous" and small is not None:
             try:
-                chosen = router_llm.route(state["question"], router.describe())
+                chosen = small.route(state["question"], router.describe())
                 route = {**route, "source": "llm", "categories": [] if chosen == [OUT_OF_SCOPE] else chosen,
                          "status": "out_of_scope" if chosen == [OUT_OF_SCOPE] else "routed"}
             except LLMError as e:
+                breaker.trip("router_agent", e)
                 route = {**route, "source": f"keywords (llm failed: {e})"}
-        route = router.with_case_context(route, state["resolution"]["governing_rule"])
+        elif route["status"] == "ambiguous":
+            route = {**route, "source": "keywords" + disabled(router_llm)}
+        res = state["resolution"]
+        route = router.with_case_context(route, [res["governing_rule"]] + res["escalation_rules"])
         routed_kb, routed_rules = router.select(route["categories"], kb, policy)
         return {"route": route, "routed_kb": routed_kb, "routed_rules": routed_rules}
 
@@ -96,19 +113,34 @@ def build(kb, policy, all_facts, llm=None, router_llm=None):
 
     def intent_agent(state):
         rules = gate.classify(state["question"])
-        if llm is None:
-            return {"intent": rules, "intent_source": "rules"}
+        client = breaker.allow(llm)
+        if client is None:
+            return {"intent": rules, "intent_source": "rules" + disabled(llm)}
         try:
-            return {"intent": llm.classify(state["question"], intents), "intent_source": "llm"}
+            intent = client.classify(state["question"], intents)
         except LLMError as e:
+            breaker.trip("intent_agent", e)
             return {"intent": rules, "intent_source": f"rules (llm failed: {e})"}
+        if intent != gate.INFO and gate.is_information_only(state["question"]):
+            return {"intent": gate.INFO, "intent_source": "llm intent overridden by rule",
+                    "llm_intent": intent}
+        return {"intent": intent, "intent_source": "llm"}
 
     def after_intent(state):
         return "retrieval_agent" if state["intent"] in intents else "escalate_agent"
 
     def retrieval_agent(state):
+        routed = state["routed_kb"]
         query = state["question"] + " " + gate.INTENTS.get(state["intent"], {}).get("expand", "")
-        return {"retrieved": Retriever(state["routed_kb"]).search(query)}
+        hits = Retriever(routed).search(query, k=len(routed))
+        top = hits[:RETRIEVE_K]
+        # Articles governing the case's rule (or its escalation rule) are always passed on.
+        res = state["resolution"]
+        rules = {r for r in [res["governing_rule"]] + res["escalation_rules"] if r}
+        have, scores = {h["id"] for h in top}, {h["id"]: h["score"] for h in hits}
+        top += [{"id": a, "title": d["title"], "score": scores.get(a, 0.0), "added": f"governs {d['governs']}"}
+                for a, d in routed.items() if d.get("governs") in rules and a not in have]
+        return {"retrieved": top}
 
     def gate_agent(state):
         return {"gate": gate.evaluate(state["intent"], state["question"], state["retrieved"],
@@ -125,15 +157,18 @@ def build(kb, policy, all_facts, llm=None, router_llm=None):
     def responder_agent(state):
         result = state["gate"]
         grounded = [c for c in result["claims"] if c["status"] == "grounded"]
-        if llm is None or not grounded:
-            return {"segments": result["segments"], "reply_source": "template"}
+        client = breaker.allow(llm)
+        if client is None or not grounded:
+            return {"segments": result["segments"],
+                    "reply_source": "template" + (disabled(llm) if grounded else "")}
         evidence = [{"claim_id": c["id"], "docs": c["evidence"]["docs"],
                      "quotes": [e["quote"] for e in c["evidence"]["all"]]} for c in grounded]
         try:
-            segments = llm.phrase(state["question"], result["segments"], evidence,
-                                  _computed(state["resolution"], state["known"]))
+            segments = client.phrase(state["question"], result["segments"], evidence,
+                                     _computed(state["resolution"], state["known"]))
             return {"segments": segments, "reply_source": "llm"}
         except LLMError as e:
+            breaker.trip("responder_agent", e)
             return {"segments": result["segments"], "reply_source": f"template (llm failed: {e})"}
 
     def verifier_agent(state):

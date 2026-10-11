@@ -2,14 +2,18 @@
 
 A reply passes only if every number, date and dollar amount in it appears in the
 cited evidence or the computed case facts, every segment maps to a claim or
-notice from the template, no escalation or notice was dropped, and grounded
-segments still cite their article.
+notice from the template, no escalation or notice was dropped, and each grounded
+claim's citation sits in the sentence that states the claim (the sentence sharing
+the most words with the evidence quote), not elsewhere in the paragraph.
 """
 import re
+import unicodedata
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 import resolver
+from retriever import tokenize
+from router import stem
 
 MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august",
           "september", "october", "november", "december"]
@@ -26,6 +30,14 @@ NAMED_DATE = re.compile(rf"\b({'|'.join(MONTHS)})\s+(\d{{1,2}})(?:st|nd|rd|th)?(
 NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 
+DASHES = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"), "-")
+
+
+def normalize(text):
+    """Fold Unicode spaces and dashes (e.g. 'KB\u20111002', 'Tier\u202f2') to ASCII before checking."""
+    return unicodedata.normalize("NFKC", text).translate(DASHES)
+
+
 def _num(token):
     try:
         return format(Decimal(token.replace(",", "")).normalize(), "f")
@@ -36,7 +48,7 @@ def _num(token):
 def values(text):
     """Normalized values in text: 'date:YYYY-MM-DD', 'md:MM-DD' (no year) and numbers."""
     out = set()
-    text = LABELS.sub(" ", text)
+    text = LABELS.sub(" ", normalize(text))
 
     def iso(m):
         out.add(f"date:{m[1]}-{m[2]}-{m[3]}")
@@ -53,6 +65,38 @@ def values(text):
     return out
 
 
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+
+def sentences(text):
+    """Split into sentences; a citation written after the period ('... date. [KB-1004]') stays attached."""
+    out = []
+    for part in SENTENCE_END.split(text.strip()):
+        lead = re.match(r"((?:\[[^\]]*\]\s*)+[.!?]?)\s*", part)
+        if out and lead:  # citations opening a chunk belong to the sentence before it
+            out[-1] += " " + lead[1].strip()
+            part = part[lead.end():]
+        if part:
+            out.append(part)
+    return out
+
+
+def _words(text):
+    return {stem(t) for t in tokenize(LABELS.sub(" ", text))}
+
+
+def claim_sentences(text, quotes):
+    """Sentences of a segment that best restate the evidence quotes (ties all count)."""
+    evidence = set().union(*(_words(q) for q in quotes))
+    scored = [(len(_words(s) & evidence), s) for s in sentences(text)]
+    best = max((n for n, _ in scored), default=0)
+    return [s for n, s in scored if n == best and n > 0]
+
+
+def _cites(sentence, docs):
+    return any(re.search(rf"\[[^\]]*\b{re.escape(d)}\b[^\]]*\]", sentence) for d in docs)
+
+
 def _fact_text(value):
     if isinstance(value, (date, datetime)):
         return value.isoformat(sep=" ") if isinstance(value, datetime) else value.isoformat()
@@ -65,7 +109,7 @@ def allowed_values(gate_result, resolution, facts):
                for e in c["evidence"]["all"]]
     sources += [_fact_text(f["value"]) for f in facts.values() if f["value"] is not None]
     sources += [_fact_text(resolution[k]) for k in
-                ("credit", "formula", "full_days", "request_deadline", "dispute_window_end")
+                ("credit", "formula", "full_days", "outage_hours", "request_deadline", "dispute_window_end")
                 if resolution.get(k) is not None]
     sources += [str(resolver.DISPUTE_WINDOW_DAYS), str(resolver.OUTAGE_REQUEST_DAYS)]
     allowed = set()
@@ -86,14 +130,18 @@ def verify(segments, template_segments, gate_result, resolution, facts):
         if cid not in seen:
             errors.append(f"segment for '{cid}' is missing")
     for s in segments:
-        cid, text = s["claim_id"], s["text"]
+        cid, text = s["claim_id"], normalize(s["text"])
         if cid not in template_ids:
             errors.append(f"'{cid}' does not map to a grounded claim or notice")
             continue
         claim = claims.get(cid)
         if claim and claim["status"] == "grounded":
-            if not any(d in text for d in claim["evidence"]["docs"]):
-                errors.append(f"'{cid}' no longer cites {claim['evidence']['docs']}")
+            docs = claim["evidence"]["docs"]
+            if not any(d in text for d in docs):
+                errors.append(f"'{cid}' no longer cites {docs}")
+            elif not any(_cites(sen, docs) for sen in
+                         claim_sentences(text, [e["quote"] for e in claim["evidence"]["all"]])):
+                errors.append(f"'{cid}' cites {docs} outside the sentence that states the claim")
         elif claim and "Tier 2" not in text:
             errors.append(f"declined '{cid}' does not say it was escalated to Tier 2")
         bad = sorted(values(text) - allowed)

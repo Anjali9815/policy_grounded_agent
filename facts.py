@@ -111,6 +111,33 @@ def extract(text):
     return facts
 
 
+DATETIME_FACTS = {"outage_start", "outage_end"}
+DATE_FACTS = {"chat_date", "statement_date"}
+DECIMAL_FACTS = {"monthly_recurring_charge", "rolling_12mo_goodwill_total"}
+
+
+def apply_overrides(facts, overrides):
+    """Scenario facts replacing extracted ones. None makes a fact unverified; False means checked and absent."""
+    if not overrides:
+        return facts
+    out = dict(facts)
+    for key, raw in overrides.items():
+        if key not in facts:
+            raise KeyError(f"unknown fact {key!r}")
+        if raw is None:
+            out[key] = unverified("removed by scenario override")
+            continue
+        value = raw
+        if key in DATETIME_FACTS:
+            value = datetime.fromisoformat(raw)
+        elif key in DATE_FACTS:
+            value = date.fromisoformat(raw)
+        elif key in DECIMAL_FACTS:
+            value = Decimal(str(raw))
+        out[key] = fact(value, "scenario_override", "eval scenario override")
+    return out
+
+
 def as_of(facts, time):
     """Facts as known at chat time 'HH:MM'; later facts become unverified."""
     out = {}

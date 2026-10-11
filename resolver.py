@@ -3,7 +3,10 @@
 Order: R5 (repeat dispute / fraud) first and overrides everything; then R3 if all
 of its conditions hold (R3 is the more specific rule, so it governs instead of R2
 per R0); otherwise R2. Escalation for an R3 credit is checked only against R4(b);
-an R3 credit is never compared to the R2/R4(a) $75.00 ceiling.
+an R3 credit is never compared to the R2/R4(a) $75.00 ceiling. A ticket that
+exists but cannot be verified keeps R3 and fails R4(b). Under R2 no amount is
+computed: the outage formula belongs to R3, and R0 forbids blending two rules
+into one calculation, so R2 only checks the rolling 12-month goodwill total.
 """
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
@@ -18,6 +21,10 @@ DISPUTE_WINDOW_DAYS = 60             # R1
 
 def _known(f):
     return f["status"] != "unverified"
+
+
+def _prorate(charge, days):
+    return (charge / 30 * days).quantize(Decimal("0.01"), ROUND_HALF_UP)
 
 
 def resolve(facts):
@@ -50,8 +57,12 @@ def resolve(facts):
     # R3 conditions.
     ticket, start, end = facts["noc_ticket"], facts["outage_start"], facts["outage_end"]
     r3, hours, full_days, deadline = [], None, None, None
-    r3.append(check("R3.noc_ticket", "R3", "passed" if _known(ticket) else "unverified",
-                    f"{ticket['value']} ({ticket['source']})" if _known(ticket) else ticket["source"]))
+    if not _known(ticket):
+        r3.append(check("R3.noc_ticket", "R3", "unverified", ticket["source"]))
+    elif not ticket["value"]:  # looked up and none exists
+        r3.append(check("R3.noc_ticket", "R3", "failed", f"no NOC outage ticket found ({ticket['source']})"))
+    else:
+        r3.append(check("R3.noc_ticket", "R3", "passed", f"{ticket['value']} ({ticket['source']})"))
     if _known(start) and _known(end):
         hours = (end["value"] - start["value"]).total_seconds() / 3600
         full_days = int(hours // 24)
@@ -68,7 +79,7 @@ def resolve(facts):
         "governing_rule": None, "citations": [], "checks": checks, "not_applied": [],
         "credit": None, "formula": None, "full_days": full_days, "outage_hours": hours,
         "request_deadline": deadline, "dispute_window_end": window_end,
-        "escalate": False, "escalation_reasons": [], "pending_verification": [],
+        "escalate": False, "escalation_reasons": [], "escalation_rules": [], "pending_verification": [],
         "may_apply": False,
     }
 
@@ -77,9 +88,11 @@ def resolve(facts):
                       escalation_reasons=["R5: repeat dispute or fraud indicator; credit decision is Tier 2's"])
         return result
 
-    if all(s == "passed" for s in r3):
-        charge = facts["monthly_recurring_charge"]["value"]
-        credit = (charge / 30 * full_days).quantize(Decimal("0.01"), ROUND_HALF_UP)
+    charge = facts["monthly_recurring_charge"]["value"]
+    ticket_status = r3[0]
+    # R3 governs when every condition holds; a ticket that exists but can't be verified is R4(b)'s case.
+    if ticket_status in ("passed", "unverified") and all(s == "passed" for s in r3[1:]):
+        credit = _prorate(charge, full_days)
         result.update(governing_rule="R3", citations=["R3", "R0"], credit=credit,
                       formula=f"(${charge} ÷ 30) × {full_days} full days = ${credit}")
         result["not_applied"] = [
@@ -97,18 +110,35 @@ def resolve(facts):
                   f"${credit} vs ${OUTAGE_CREDIT_LIMIT}"),
             check("R4b.outage_not_over_30_days", "R4", "passed" if full_days <= OUTAGE_MAX_DAYS else "failed",
                   f"{full_days} days vs {OUTAGE_MAX_DAYS}"),
-            check("R4b.ticket_verified", "R4", "passed", f"{ticket['value']} confirmed by agent lookup"),
+            check("R4b.ticket_verified", "R4", "passed", f"{ticket['value']} confirmed by agent lookup")
+            if ticket_status == "passed" else
+            check("R4b.ticket_verified", "R4", "failed", "NOC ticket number cannot be verified at the time of the request"),
         ]
         if "failed" in r4b:
-            result["escalate"] = True
-            result["escalation_reasons"].append("R4(b): outage credit over threshold")
+            failed = [c["id"] for c in checks if c["rule"] == "R4" and c["status"] == "failed"]
+            result.update(escalate=True, escalation_rules=["R4"])
+            result["escalation_reasons"].append(f"R4(b): {', '.join(failed)}")
     elif "failed" in r3:
-        result.update(governing_rule="R2", citations=["R2"])
-        if not _known(facts["rolling_12mo_goodwill_total"]):
+        # R3 conditions not met: a general goodwill request under R2, capped at $75.00 (R3, last paragraph).
+        failed = [c["id"] for c in checks if c["rule"] == "R3" and c["status"] == "failed"]
+        result.update(governing_rule="R2", citations=["R2", "R3"])
+        result["not_applied"] = [{"rule": "R3", "reason": f"R3 conditions not met ({', '.join(failed)}); "
+                                                          f"evaluated under R2 as general goodwill"}]
+        prior = facts["rolling_12mo_goodwill_total"]
+        if not _known(prior):
+            check("R2.rolling_12_month_total", "R2", "unverified",
+                  f"account credit history: {prior['source']}")
             result["escalate"] = True
             result["escalation_reasons"].append(
-                "R4(a): rolling 12-month goodwill total unknown, cannot confirm $75.00 ceiling")
-        return result
+                "R2: rolling 12-month goodwill total not verified; the credit amount goes to Tier 2")
+        elif prior["value"] >= GOODWILL_CAP:
+            check("R2.rolling_12_month_total", "R2", "failed",
+                  f"${prior['value']} already issued in the last 12 months vs ${GOODWILL_CAP}")
+            result.update(escalate=True, escalation_rules=["R4"])
+            result["escalation_reasons"].append("R4(a): any further goodwill credit would exceed $75.00")
+        else:
+            check("R2.rolling_12_month_total", "R2", "passed",
+                  f"${prior['value']} issued in the last 12 months; ${GOODWILL_CAP - prior['value']} left")
     else:
         return result  # R3 conditions not yet established; no governing rule.
 

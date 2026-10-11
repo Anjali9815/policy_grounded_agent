@@ -10,7 +10,13 @@ from loader import load_kb, load_policy
 from memory import CaseMemory
 from router import OUT_OF_SCOPE_VALUE
 
-TRACE = Path(__file__).resolve().parent / "trace.json"
+TRACES = Path(__file__).resolve().parent / "traces"
+
+
+def cited_articles(gate_result):
+    """KB ids the gate grounded claims on (every retrieved article that stated a grounded claim)."""
+    return sorted({d for c in gate_result["claims"] if c["status"] == "grounded"
+                   for d in c["evidence"]["docs"]})
 
 
 class Agent:
@@ -23,7 +29,8 @@ class Agent:
         if router_llm_client is None and llm_client is None:
             router_llm_client = llm.make_router(use_llm)
         self.router_llm = router_llm_client
-        self.graph = graph.build(self.kb, self.policy, self.facts, self.llm, self.router_llm)
+        self.breaker = llm.CircuitBreaker()
+        self.graph = graph.build(self.kb, self.policy, self.facts, self.llm, self.router_llm, self.breaker)
         self.memory = CaseMemory()
         self.full_context_tokens = graph.context_tokens(self.kb) + graph.context_tokens(self.policy)
 
@@ -31,15 +38,19 @@ class Agent:
         clients = {id(c): c for c in (self.llm, self.router_llm) if c is not None}
         return [getattr(c, "usage_log", []) for c in clients.values()]
 
-    def answer(self, question, time="23:59"):
-        """Run one customer message through the graph using the facts known at chat time 'HH:MM'."""
+    def answer(self, question, time="23:59", fact_overrides=None):
+        """Run one customer message through the graph using the facts known at chat time 'HH:MM'.
+
+        fact_overrides replaces extracted case facts for this turn (scenario tests)."""
         marks = [len(log) for log in self._usage_logs()]
-        s = self.graph.invoke({"question": question, "time": time, "memory": self.memory})
+        s = self.graph.invoke({"question": question, "time": time, "memory": self.memory,
+                               "fact_overrides": fact_overrides or {}})
         calls = [c for log, m in zip(self._usage_logs(), marks) for c in log[m:]]
         resolution, result, route = s["resolution"], s["gate"], s["route"]
         governing = graph.governing_for(s["intent"], resolution)
         return {
             "time": time, "question": question, "intent": s["intent"], "intent_source": s["intent_source"],
+            "llm_intent": s.get("llm_intent"),
             "route": {"status": route["status"], "categories": route["categories"],
                       "source": route["source"], "reason": route["reason"],
                       "case_context": route.get("case_context"), "scores": route["scores"],
@@ -58,12 +69,15 @@ class Agent:
             "checks": resolution["checks"], "not_applied": resolution["not_applied"],
             "checks_view": self.memory.check_view(resolution) if s["intent"] in gate.INTENTS else None,
             "credit": resolution["credit"], "formula": resolution["formula"],
+            "fact_overrides": fact_overrides or {},
             "request_deadline": resolution["request_deadline"],
             "pending_verification": resolution["pending_verification"],
             "escalation_reasons": resolution["escalation_reasons"],
-            "claims": result["claims"], "decision": result["decision"], "escalate": result["escalate"],
+            "claims": result["claims"], "cited_articles": cited_articles(result),
+            "decision": result["decision"], "escalate": result["escalate"],
             "segments": s["segments"], "reply": " ".join(seg["text"] for seg in s["segments"]),
             "reply_source": s["reply_source"], "verifier": s["verifier"],
+            "llm_breaker": {"open": self.breaker.open, "reason": self.breaker.reason},
         }
 
     def run(self):
@@ -85,7 +99,8 @@ def show(trace):
         print(f"tokens:    routed context ~{tok['routed_context']} of ~{tok['full_context']} "
               f"(articles {', '.join(r['articles']) or '-'}; rules {', '.join(r['rules']) or '-'}); "
               f"llm {tok['llm_input']} in / {tok['llm_output']} out over {len(tok['llm_calls'])} calls")
-        print(f"intent:    {t['intent']} ({t['intent_source']})")
+        print(f"intent:    {t['intent']} ({t['intent_source']}"
+              + (f"; llm said {t['llm_intent']})" if t["llm_intent"] else ")"))
         print("retrieved: " + (", ".join(f"{r['id']} ({r['score']})" for r in t["retrieved"]) or "-"))
         print(f"governing: {t['governing_rule'] or '-'}"
               + (f" — {t['governing_rule_title']}  cites {t['citations']}" if t["governing_rule"] else ""))
@@ -108,8 +123,39 @@ def show(trace):
         print(f"reply:     ({t['reply_source']}) {t['reply']}")
 
 
+def _llm_label(client):
+    return f"{getattr(client, 'provider', 'custom')} / {getattr(client, 'model', type(client).__name__)}"
+
+
+def header(agent):
+    """Provider and model used by each agent in this run."""
+    main = _llm_label(agent.llm) if agent.llm else None
+    small = _llm_label(agent.router_llm) if agent.router_llm else None
+    rows = [
+        ("policy_agent", "deterministic resolver (no LLM)"),
+        ("router_agent", "frontmatter keywords" + (f"; ambiguous only: {small}" if small else " (no LLM)")),
+        ("intent_agent", f"{main}; rules fallback" if main else "keyword rules (no LLM)"),
+        ("retrieval_agent", "BM25 over routed articles (no LLM)"),
+        ("gate_agent", "deterministic claim grounding (no LLM)"),
+        ("responder_agent", f"{main}; template fallback" if main else "templates (no LLM)"),
+        ("verifier_agent", "deterministic checks (no LLM)"),
+    ]
+    mode = "LLM" if (main or small) else "deterministic"
+    return [f"Run mode: {mode}"] + [f"  {name:<16} {desc}" for name, desc in rows]
+
+
+def trace_path(agent):
+    if agent.llm is None and agent.router_llm is None:
+        return TRACES / "trace_deterministic.json"
+    return TRACES / f"trace_{getattr(agent.llm or agent.router_llm, 'provider', 'llm')}.json"
+
+
 if __name__ == "__main__":
-    trace = run()
+    agent = Agent()
+    print("\n".join(header(agent)))
+    trace = agent.run()
     show(trace)
-    TRACE.write_text(json.dumps(trace, indent=2, default=str, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"\nwrote {TRACE.name}")
+    path = trace_path(agent)
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(json.dumps(trace, indent=2, default=str, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"\nwrote {path.relative_to(TRACES.parent)}")

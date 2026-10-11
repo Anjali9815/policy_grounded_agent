@@ -92,16 +92,17 @@ class Router:
                   if s["in_scope"] and s["score"] >= best_in * RELATIVE_CUTOFF]
         return {**result, "status": "routed", "categories": chosen, "reason": "keyword match"}
 
-    def with_case_context(self, route, case_rule):
-        """Add the category governing the case's current rule to an in-scope route."""
-        if route["status"] != "routed" or not case_rule:
+    def with_case_context(self, route, case_rules):
+        """Add the categories governing the case's rules (governing rule plus any escalation rule)."""
+        case_rules = [r for r in case_rules if r]
+        if route["status"] != "routed" or not case_rules:
             return route
         extra = [n for n, c in self.categories.items()
-                 if case_rule in c["governs"] and n not in route["categories"]]
+                 if set(case_rules) & set(c["governs"]) and n not in route["categories"]]
         if not extra:
             return route
         return {**route, "categories": route["categories"] + extra,
-                "case_context": {"rule": case_rule, "added": extra}}
+                "case_context": {"rule": ", ".join(case_rules), "added": extra}}
 
     def select(self, categories, kb, policy):
         """Only the routed categories' articles and the rules they govern."""

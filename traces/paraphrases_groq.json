@@ -1,0 +1,307 @@
+{
+  "run": [
+    "Run mode: LLM",
+    "  policy_agent     deterministic resolver (no LLM)",
+    "  router_agent     frontmatter keywords; ambiguous only: groq / openai/gpt-oss-20b",
+    "  intent_agent     groq / openai/gpt-oss-120b; rules fallback",
+    "  retrieval_agent  BM25 over routed articles (no LLM)",
+    "  gate_agent       deterministic claim grounding (no LLM)",
+    "  responder_agent  groq / openai/gpt-oss-120b; template fallback",
+    "  verifier_agent   deterministic checks (no LLM)"
+  ],
+  "passed": 9,
+  "total": 9,
+  "cases": [
+    {
+      "id": "paraphrase-1409-casual",
+      "paraphrase_of": "turn-1409-credit-limit",
+      "question": "wait so you guys can only refund me like 75 bucks max for this?",
+      "pass": true,
+      "expected": {
+        "decision": "ANSWER",
+        "governing_rule": "R3",
+        "cited_articles": [
+          "KB-1004"
+        ]
+      },
+      "decision": "ANSWER",
+      "governing_rule": "R3",
+      "cited_articles": [
+        "KB-1004"
+      ],
+      "intent": "credit_limit",
+      "intent_source": "llm",
+      "reply": "The $75.00 limit does not apply to an outage credit. Our policy states that this credit applies only to the recurring plan charge and is issued separately from, and is not limited by, the standard $75.00 goodwill credit ceiling described in KB-1002 [KB-1004]. For a confirmed outage, the credit is calculated as (current monthly recurring charge ÷ 30) multiplied by the number of full days without service [KB-1004]. With ticket OUT-58823, that works out to ($225.00 ÷ 30) × 11 full days = $82.50, under Rule 3. Before the credit can be applied, we still need to review your account’s dispute history and complete a fraud check [R5]; this information isn’t visible in our conversation, so I’m not assuming it’s cleared.",
+      "reply_source": "llm",
+      "verifier_passed": true,
+      "verifier_errors": [],
+      "rejected_llm_reply": null,
+      "llm_calls": 2,
+      "llm_tokens": 1899,
+      "llm_breaker": {
+        "open": false,
+        "reason": null
+      }
+    },
+    {
+      "id": "paraphrase-1409-terse",
+      "paraphrase_of": "turn-1409-credit-limit",
+      "question": "Is the refund capped at $75?",
+      "pass": true,
+      "expected": {
+        "decision": "ANSWER",
+        "governing_rule": "R3",
+        "cited_articles": [
+          "KB-1004"
+        ]
+      },
+      "decision": "ANSWER",
+      "governing_rule": "R3",
+      "cited_articles": [
+        "KB-1004"
+      ],
+      "intent": "credit_limit",
+      "intent_source": "llm",
+      "reply": "The $75 limit does not apply to an outage credit. Our policy states that this credit applies only to the recurring plan charge and is issued separately from, and is not limited by, the standard $75 goodwill credit ceiling described in KB-1002 [KB-1004]. For a confirmed outage, the credit is calculated as (current monthly recurring charge ÷ 30) × number of full days without service [KB-1004]. Using ticket OUT-58823, that works out to ($225.00 ÷ 30) × 11 full days = $82.50, under Rule 3. Before the credit can be applied, your account’s dispute history and fraud review still need to be checked [R5]; this information isn’t visible in our conversation, so I can’t confirm the status.",
+      "reply_source": "llm",
+      "verifier_passed": true,
+      "verifier_errors": [],
+      "rejected_llm_reply": null,
+      "llm_calls": 2,
+      "llm_tokens": 2768,
+      "llm_breaker": {
+        "open": false,
+        "reason": null
+      }
+    },
+    {
+      "id": "paraphrase-1409-typo",
+      "paraphrase_of": "turn-1409-credit-limit",
+      "question": "isnt your refnud limit only $75 for this?",
+      "pass": true,
+      "expected": {
+        "decision": "ANSWER",
+        "governing_rule": "R3",
+        "cited_articles": [
+          "KB-1004"
+        ]
+      },
+      "decision": "ANSWER",
+      "governing_rule": "R3",
+      "cited_articles": [
+        "KB-1004"
+      ],
+      "intent": "credit_limit",
+      "intent_source": "llm",
+      "reply": "The $75 limit does not apply to an outage credit. Our policy states that this credit applies only to the recurring plan charge and is issued separately from, and is not limited by, the standard $75 goodwill credit ceiling described in KB-1002 [KB-1004]. For a confirmed outage, the credit is calculated as (current monthly recurring charge ÷ 30) × number of full days without service [KB-1004]. Using ticket OUT-58823, this works out to ($225.00 ÷ 30) × 11 full days = $82.50, which follows Rule 3. Before the credit can be applied, your account’s dispute history and fraud review still need to be checked [R5]; this information isn’t visible in our conversation, so I can’t confirm the status.",
+      "reply_source": "llm",
+      "verifier_passed": true,
+      "verifier_errors": [],
+      "rejected_llm_reply": null,
+      "llm_calls": 2,
+      "llm_tokens": 1960,
+      "llm_breaker": {
+        "open": false,
+        "reason": null
+      }
+    },
+    {
+      "id": "paraphrase-1411-casual",
+      "paraphrase_of": "turn-1411-taxes",
+      "question": "oh also, does the credit knock anything off the taxes and surcharges too, or just the plan charge?",
+      "pass": true,
+      "expected": {
+        "decision": "PARTIAL",
+        "governing_rule": "R3",
+        "cited_articles": [
+          "KB-1004"
+        ]
+      },
+      "decision": "PARTIAL",
+      "governing_rule": "R3",
+      "cited_articles": [
+        "KB-1004"
+      ],
+      "intent": "tax_treatment",
+      "intent_source": "llm",
+      "reply": "The outage credit is applied only to your recurring plan charge, as stated: “This credit applies to the recurring plan charge only and is issued separately from, and is not limited by, the standard $75.00 goodwill credit ceiling described in KB-1002” [KB-1004]. Our guidance doesn’t specify whether the credit reduces taxes or regulatory surcharges, so I’ve escalated this question to a Tier 2 Billing Specialist for clarification.",
+      "reply_source": "llm",
+      "verifier_passed": true,
+      "verifier_errors": [],
+      "rejected_llm_reply": null,
+      "llm_calls": 2,
+      "llm_tokens": 1679,
+      "llm_breaker": {
+        "open": false,
+        "reason": null
+      }
+    },
+    {
+      "id": "paraphrase-1411-terse",
+      "paraphrase_of": "turn-1411-taxes",
+      "question": "Credit applied to taxes and surcharges, or plan charge only?",
+      "pass": true,
+      "expected": {
+        "decision": "PARTIAL",
+        "governing_rule": "R3",
+        "cited_articles": [
+          "KB-1004"
+        ]
+      },
+      "decision": "PARTIAL",
+      "governing_rule": "R3",
+      "cited_articles": [
+        "KB-1004"
+      ],
+      "intent": "tax_treatment",
+      "intent_source": "llm",
+      "reply": "The outage credit is applied only to your recurring plan charge, as noted in KB-1004, and it is issued separately from the standard $75.00 goodwill credit ceiling [KB-1004]. Because our guidance does not specify whether the credit reduces taxes and regulatory surcharges, I have escalated this question to a Tier 2 Billing Specialist.",
+      "reply_source": "llm",
+      "verifier_passed": true,
+      "verifier_errors": [],
+      "rejected_llm_reply": null,
+      "llm_calls": 2,
+      "llm_tokens": 1571,
+      "llm_breaker": {
+        "open": false,
+        "reason": null
+      }
+    },
+    {
+      "id": "paraphrase-1411-typo",
+      "paraphrase_of": "turn-1411-taxes",
+      "question": "will the credit also reduce the taxs and regulatory surcharges or only the plan charge?",
+      "pass": true,
+      "expected": {
+        "decision": "PARTIAL",
+        "governing_rule": "R3",
+        "cited_articles": [
+          "KB-1004"
+        ]
+      },
+      "decision": "PARTIAL",
+      "governing_rule": "R3",
+      "cited_articles": [
+        "KB-1004"
+      ],
+      "intent": "tax_treatment",
+      "intent_source": "llm",
+      "reply": "The outage credit is applied only to your recurring plan charge, as stated in KB‑1004: “This credit applies to the recurring plan charge only and is issued separately from, and is not limited by, the standard $75.00 goodwill credit ceiling described in KB-1002” [KB-1004]. Since our guidance does not specify if the credit reduces taxes and regulatory surcharges, I have escalated this question to a Tier 2 Billing Specialist.",
+      "reply_source": "llm",
+      "verifier_passed": true,
+      "verifier_errors": [],
+      "rejected_llm_reply": null,
+      "llm_calls": 2,
+      "llm_tokens": 1593,
+      "llm_breaker": {
+        "open": false,
+        "reason": null
+      }
+    },
+    {
+      "id": "paraphrase-1413-casual",
+      "paraphrase_of": "turn-1413-deadline",
+      "question": "how long have I got to put in a request like this once an outage is fixed? don't wanna miss it",
+      "pass": true,
+      "expected": {
+        "decision": "ANSWER",
+        "governing_rule": "R3",
+        "cited_articles": [
+          "KB-1004",
+          "KB-1005"
+        ]
+      },
+      "decision": "ANSWER",
+      "governing_rule": "R3",
+      "cited_articles": [
+        "KB-1004",
+        "KB-1005"
+      ],
+      "intent": "request_deadline",
+      "intent_source": "llm",
+      "reply": "You need to request it within 30 days of the ticket's resolution date [KB-1005, KB-1004]. Your outage was resolved on 2026-09-21, so the deadline is 2026-10-21. The 60-day billing-dispute window from your statement date is not the deadline for an outage credit [R0, R1].",
+      "reply_source": "template (verifier fallback)",
+      "verifier_passed": false,
+      "verifier_errors": [
+        "'outage_request_window' cites ['KB-1005', 'KB-1004'] outside the sentence that states the claim"
+      ],
+      "rejected_llm_reply": "Please submit your outage credit request within 30 days of the ticket’s resolution date. Your outage was resolved on 2026-09-21, so the deadline to file the request is 2026-10-21. The 60‑day billing‑dispute window from your statement date does not apply to outage credits [KB-1005, KB-1004][R0, R1].",
+      "llm_calls": 2,
+      "llm_tokens": 1573,
+      "llm_breaker": {
+        "open": false,
+        "reason": null
+      }
+    },
+    {
+      "id": "paraphrase-1413-terse",
+      "paraphrase_of": "turn-1413-deadline",
+      "question": "Deadline to request an outage credit?",
+      "pass": true,
+      "expected": {
+        "decision": "ANSWER",
+        "governing_rule": "R3",
+        "cited_articles": [
+          "KB-1004",
+          "KB-1005"
+        ]
+      },
+      "decision": "ANSWER",
+      "governing_rule": "R3",
+      "cited_articles": [
+        "KB-1004",
+        "KB-1005"
+      ],
+      "intent": "request_deadline",
+      "intent_source": "llm",
+      "reply": "You need to request it within 30 days of the ticket's resolution date [KB-1005, KB-1004]. Your outage was resolved on 2026-09-21, so the deadline is 2026-10-21. The 60-day billing-dispute window from your statement date is not the deadline for an outage credit [R0, R1].",
+      "reply_source": "template (verifier fallback)",
+      "verifier_passed": false,
+      "verifier_errors": [
+        "'outage_request_window' cites ['KB-1005', 'KB-1004'] outside the sentence that states the claim"
+      ],
+      "rejected_llm_reply": "Please submit your outage credit request within 30 days of the ticket’s resolution date. Since your outage was resolved on 2026-09-21, the deadline is 2026-10-21. The 60‑day billing‑dispute window from your statement date does not apply to outage credits [KB-1005, KB-1004] [R0, R1].",
+      "llm_calls": 2,
+      "llm_tokens": 1511,
+      "llm_breaker": {
+        "open": false,
+        "reason": null
+      }
+    },
+    {
+      "id": "paraphrase-1413-typo",
+      "paraphrase_of": "turn-1413-deadline",
+      "question": "how lnog do i have to submit the request after the outage is fixed?",
+      "pass": true,
+      "expected": {
+        "decision": "ANSWER",
+        "governing_rule": "R3",
+        "cited_articles": [
+          "KB-1004",
+          "KB-1005"
+        ]
+      },
+      "decision": "ANSWER",
+      "governing_rule": "R3",
+      "cited_articles": [
+        "KB-1004",
+        "KB-1005"
+      ],
+      "intent": "request_deadline",
+      "intent_source": "llm",
+      "reply": "You need to request it within 30 days of the ticket's resolution date [KB-1005, KB-1004]. Your outage was resolved on 2026-09-21, so the deadline is 2026-10-21. The 60-day billing-dispute window from your statement date is not the deadline for an outage credit [R0, R1].",
+      "reply_source": "template (verifier fallback)",
+      "verifier_passed": false,
+      "verifier_errors": [
+        "'outage_request_window' cites ['KB-1005', 'KB-1004'] outside the sentence that states the claim"
+      ],
+      "rejected_llm_reply": "You must submit your outage credit request within 30 days of the ticket’s resolution date. Since your outage was resolved on 2026-09-21, the request deadline is 2026-10-21. The 60‑day billing‑dispute window from your statement date does not apply to outage credits [KB-1005, KB-1004] [R0, R1].",
+      "llm_calls": 2,
+      "llm_tokens": 1552,
+      "llm_breaker": {
+        "open": false,
+        "reason": null
+      }
+    }
+  ]
+}

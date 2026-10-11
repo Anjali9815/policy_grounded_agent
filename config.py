@@ -17,12 +17,24 @@ def use_llm():
     return os.getenv("USE_LLM", "0").strip() == "1"
 
 
-def model():
-    return os.getenv("ANTHROPIC_MODEL", "claude-opus-5-5")
+def provider():
+    return os.getenv("LLM_PROVIDER", "anthropic").strip().lower()
+
+
+# Defaults exist only for Anthropic; Groq models must be named in the environment.
+DEFAULTS = {"anthropic": {"responder": "claude-opus-5-5", "router": "claude-haiku-5-5"}}
+
+
+def responder_model():
+    """Model for the intent and responder agents."""
+    return (os.getenv("RESPONDER_MODEL") or
+            (os.getenv("ANTHROPIC_MODEL") if provider() == "anthropic" else None) or
+            DEFAULTS.get(provider(), {}).get("responder"))
 
 
 def router_model():
-    return os.getenv("ROUTER_MODEL", "claude-haiku-5-5")
+    """Small, fast model used only when keyword routing is ambiguous."""
+    return os.getenv("ROUTER_MODEL") or DEFAULTS.get(provider(), {}).get("router")
 
 
 def langsmith_enabled():
