@@ -1,72 +1,122 @@
 # Policy-Grounded Billing Dispute Agent
 
-A prototype billing-dispute agent for Cresta Agentic Assist. It answers a customer only when a knowledge-base article explicitly supports the answer, and escalates to Tier 2 otherwise.
-It is a LangGraph multi-agent workflow. Policy selection is always deterministic, and LLM steps are optional (`USE_LLM=1`, with `LLM_PROVIDER=anthropic` or `groq`).
+A policy-grounded billing support prototype for Cresta Agentic Assist. It answers from cited knowledge-base evidence, applies policy rules deterministically, and escalates unsupported or out-of-scope questions to Tier 2.
 
-**Requirements:** Python 3.10+. Install with `pip install -r requirements.txt`, then `cp .env.example .env`. With `USE_LLM=0` (the default) it needs no keys.
+The workflow is built with **Python and LangGraph**. Optional LLM steps use **Groq or Anthropic**; the deterministic path works without API keys. **LangSmith** is used for evaluation and optional tracing.
 
-**Run:** `python run.py` prints which provider/model each agent uses, then a trace for each turn. It writes `traces/trace_deterministic.json` (`USE_LLM=0`) or `traces/trace_<provider>.json` (`USE_LLM=1`).
-**Ask:** `python ask.py` is an interactive loop. It replays the transcript to load the case memory (with no LLM calls), then for each question prints the route, governing rule, cited articles, decision and reply. `--fresh` starts with empty case memory, so only the account header is known. `--no-llm` forces deterministic mode. Type `quit` to exit.
-**Tests:** `python -m unittest discover tests` (no keys needed; LLMs are faked).
-**Paraphrases:** `python scripts/run_paraphrases.py` runs the paraphrase cases and writes `traces/paraphrases_<provider>.json`.
-**LangSmith eval:** `python scripts/eval_langsmith.py` (runs only if `LANGSMITH_API_KEY` is set; use `--recreate` after changing `data/eval_cases.json`).
+## At A Glance
 
-## Agents (graph nodes)
-`policy_agent` → `router_agent` → `intent_agent` → `retrieval_agent` → `gate_agent` → `responder_agent` → `verifier_agent`. Out-of-scope or unroutable turns, and `unknown` intents, go to `escalate_agent` → `verifier_agent`.
-- **policy_agent**: the deterministic resolver, with no LLM. Checks R5 first, and R3 over R2 via R0. It runs first because it needs only case facts, not the KB.
-- **router_agent**: scores KB categories from frontmatter (`category`, `scope`, `governs`, `tags`). Out of scope escalates with no LLM call. Only an ambiguous match calls the small model (`ROUTER_MODEL`). An in-scope route also gets the category governing the case's current rule. Later agents see only the routed articles and the rules they govern.
-- **intent_agent**: the LLM picks from the fixed intent list or `unknown` (a JSON-schema enum). Falls back to keyword rules.
-- **retrieval_agent**: BM25 over the routed articles only.
-- **gate_agent**: grounds each claim in a retrieved article and builds the template reply as claim-tagged segments.
-- **responder_agent**: the LLM rephrases the segments using only the cited evidence and computed facts.
-- **verifier_agent**: checks every number, date and $ amount against the evidence or computed facts. It also checks that every segment maps to a claim, keeps any Tier 2 escalation, and cites its article in the sentence that states the claim. That sentence is the one sharing the most words with the evidence quote; a citation moved elsewhere fails. On failure the template reply is used instead.
+- **Policy first:** rule precedence, eligibility, and credit calculations are handled in code.
+- **Evidence before wording:** each answer claim must be supported by a retrieved article.
+- **Narrow context:** metadata routing limits which KB articles reach retrieval and response generation.
+- **Fail closed:** unknown intents and unsupported claims escalate; failed LLM verification falls back to a grounded template.
+- **Inspectable runs:** traces record routes, evidence, decisions, token counts, and verifier outcomes.
 
-**LLM providers:** `LLM_PROVIDER` chooses between Anthropic (JSON-schema structured outputs) and Groq (JSON mode, with the schema in the prompt). `RESPONDER_MODEL` runs intent and responder, and `ROUTER_MODEL` runs ambiguous routing. Every provider's output goes through the same enum/schema validation and the same verifier. **Circuit breaker:** the first LLM failure (API error, bad JSON, invented enum value) disables every LLM for the rest of the run, logs one line, and the run continues deterministically. A verifier rejection is not an LLM failure, so it doesn't trip the breaker.
+## How It Works
 
-`CaseMemory` sits in the graph state and carries facts, checks and per-turn decisions (with routed categories) across turns.
-
-## Layout
-```
-graph.py       LangGraph workflow (nodes, routing)     memory.py     CaseMemory
-llm.py         LLM providers, validation, breaker      verifier.py   reply verification
-facts.py       transcript facts                        retriever.py  scope filter + BM25
-resolver.py    rule selection, credit, escalation      gate.py       intents, grounding, templates
-loader.py      frontmatter parser                      config.py     .env settings
-router.py      frontmatter category routing
-run.py         runs the transcript, prints the trace   eval_cases.py shared eval cases
-ask.py         interactive questions on the case       traces/       saved runs
-data/kb, data/policy   one article / rule per file     data/raw      original sources
-data/eval_cases.json   expected decision, rule, articles   scripts/  LangSmith eval, paraphrase run
+```mermaid
+flowchart LR
+	A[Customer turn] --> B[Policy resolver]
+	B --> C[Metadata router]
+	C -->|Out of scope| H[Escalate]
+	C -->|Routed KB subset| D[Intent classification]
+	D --> E[BM25 retrieval]
+	E --> F[Claim grounding gate]
+	F --> G[LLM phrasing or template]
+	H --> I[Verifier]
+	G --> I
+	I -->|Pass| J[Reply]
+	I -->|Reject| K[Grounded template fallback]
 ```
 
-## Reading the trace
-Each turn shows the route (categories, keywords or LLM, any category added from the case rule), the token count (routed context vs the full KB, plus LLM input/output tokens), the intent (and whether rules or the LLM picked it), retrieved articles with scores, the governing rule, the checks (in full once, then only what changed), the claims, the verifier result and the reply with its source (`template`, `llm` or `template (verifier fallback)`).
+1. **Resolve policy and case facts.** The deterministic resolver checks precedence and computes applicable dates and credits before language-model calls.
+2. **Route by KB metadata.** Article frontmatter supplies category, scope, governing rule, and tags. Category terms are scored with IDF weighting. Clearly out-of-scope turns escalate without an LLM call; only ambiguous routing may use the smaller router model. The current case rule's category is added for relevant follow-up questions.
+3. **Classify and retrieve.** Intent uses a fixed set of allowed values, with a keyword fallback. BM25 ranks articles only within the routed subset.
+4. **Ground claims, then phrase.** A deterministic gate checks whether each requested claim is supported and creates claim-tagged reply segments. The responder LLM, when enabled, receives those segments, evidence quotes, and computed facts rather than the whole KB.
+5. **Verify the final reply.** The verifier checks numbers, dates, amounts, escalation language, segment-to-claim mapping, and sentence-level citations. If an LLM reply fails, the grounded template is returned.
 
-| Decision | Meaning |
+Case memory carries known facts, checks, and per-turn decisions through a conversation. A circuit breaker disables LLM calls for the remainder of a run after the first API or structured-output failure.
+
+## Token And Context Efficiency
+
+The main optimization is **context selection**, not a custom tokenizer. Knowledge articles and policy rules are stored as separate Markdown files with YAML frontmatter. The metadata router narrows the corpus before BM25 retrieval, and only grounded claims plus their evidence are passed to the response model. Deterministic policy resolution and out-of-scope routing also avoid unnecessary LLM calls.
+
+In a checked-in sample trace, the estimated KB context fell from **2,807 tokens for the full KB to 295 for the routed article bodies** (about 89% less KB text for that turn). This is a rough text-token estimate, not a tokenizer count, total prompt size, or guaranteed API-billing reduction. Provider-reported LLM input and output token counts are recorded separately in traces.
+
+## Technology
+
+| Technology | Use in this project |
 |---|---|
-| `ANSWER` | Every required claim is grounded in a retrieved article. |
-| `PARTIAL` | The grounded claims are answered and the rest are escalated to Tier 2. |
-| `ESCALATE` | Nothing is grounded, the intent is unknown, or R5 applies. Goes to Tier 2. |
-| `NO_QUESTION` | The turn only provides details (account, dates), so there is nothing to answer. |
+| Python | Policy logic, routing, retrieval, verification, and CLI tools |
+| LangGraph | Explicit multi-step workflow and shared turn state |
+| BM25 | Ranking relevant articles inside the already-routed KB subset |
+| Groq / Anthropic | Optional intent classification, ambiguous routing, and response phrasing |
+| LangSmith | Optional tracing and evaluation runs |
+| Markdown + YAML frontmatter | Small, independently routable KB articles and policy rules |
+| `python-dotenv` | Local `.env` configuration |
 
-## Eval cases and results
-`data/eval_cases.json` holds 26 cases. Each has an expected decision, governing rule and cited KB articles.
-- **Transcript turns (6) and unseen questions (3):** all pass in deterministic mode.
-- **Scenarios (8):** each overrides case facts for the 14:09 credit question. All pass in deterministic mode.
+## Quick Start
 
-| Scenario | Decision | Rule | Articles |
-|---|---|---|---|
-| No NOC ticket | PARTIAL | R2 | KB-1002 |
-| Outage exactly 4 hours | PARTIAL | R2 | KB-1002, KB-1004 |
-| Request on day 31 after resolution | PARTIAL | R2 | KB-1002 |
-| Credit over $300 ($301.03) | PARTIAL | R3 | KB-1004, KB-1006 |
-| Outage of 31 days | PARTIAL | R3 | KB-1004, KB-1006 |
-| Ticket exists but can't be verified | PARTIAL | R3 | KB-1004, KB-1006 |
-| Prior resolved dispute within 90 days | ESCALATE | R5 | KB-1007 |
-| Fraud flag | ESCALATE | R5 | KB-1007 |
+Python 3.10 or newer is required.
 
-Under R2 no amount is quoted: the $75 ceiling is cumulative and the credit history isn't in the transcript, so the amount goes to Tier 2. Under R3, R4(b) escalations quote the computed credit and say why it needs approval.
+```bash
+pip install -r requirements.txt
+cp .env.example .env
+python run.py
+```
 
-**Paraphrases (9):** casual, terse and typo rewordings of the 14:09, 14:11 and 14:13 questions, each expecting the original's outcome.
-- **Deterministic: 7 of 9.** The keyword rules miss "75 bucks max" (no `$75` or `limit`) and "how lnog" (typo of `how long`). Both are marked as expected failures in `tests/test_paraphrases.py` and escalate rather than answer wrongly.
-- **Groq (`gpt-oss-120b`), `traces/paraphrases_groq.json`: 9 of 9** reach the right decision, rule and articles. On all three 14:13 rewordings the LLM moved the deadline's citation to the end of the paragraph, so the verifier rejected the reply and the template was used.
+The default is `USE_LLM=0`, so no API keys are needed for deterministic runs. To enable a provider, set `USE_LLM=1`, choose `LLM_PROVIDER=groq` or `LLM_PROVIDER=anthropic`, and add the matching API key and model names to `.env`. `RESPONDER_MODEL` is used for intent and response phrasing; `ROUTER_MODEL` is used only when keyword routing is ambiguous.
+
+### Useful Commands
+
+| Command | Purpose |
+|---|---|
+| `python run.py` | Run the sample transcript and write a JSON trace under `traces/` |
+| `python ask.py` | Ask questions interactively against the case memory |
+| `python ask.py --fresh` | Start without replaying the transcript into case memory |
+| `python ask.py --no-llm` | Force deterministic behavior in the interactive session |
+| `python -m unittest discover tests` | Run the test suite; LLM calls are faked |
+| `python scripts/run_paraphrases.py` | Run paraphrase cases and save a trace |
+| `python scripts/eval_langsmith.py` | Run the LangSmith evaluation when `LANGSMITH_API_KEY` is configured |
+
+Type `quit` to leave the interactive `ask.py` session. Use `--recreate` with the LangSmith evaluation script after changing `data/eval_cases.json`.
+
+## Evaluation Snapshot
+
+The checked-in evaluation set contains 26 cases with expected decisions, governing rules, and cited articles: transcript turns, unseen questions, rule-boundary scenarios, and paraphrases.
+
+- Deterministic mode passes the transcript turns, unseen questions, and all eight policy scenarios. It gets 7 of 9 paraphrases; the two known misses escalate instead of guessing.
+- In the recorded Groq paraphrase run, all 9 cases reached the expected decision, rule, and articles. The verifier rejected three replies with misplaced citations and used the template instead.
+- The LangSmith run recorded 24 scored cases; two were unscored because of an evaluator error. See `traces/` and `tests/` for run artifacts and coverage.
+
+These are prototype results, not a production accuracy or latency guarantee. The verifier checks structural and value-level constraints; semantic faithfulness still needs broader human-labeled evaluation.
+
+## Decisions
+
+| Outcome | Meaning |
+|---|---|
+| `ANSWER` | Every required claim is grounded in retrieved evidence. |
+| `PARTIAL` | Supported claims are answered; unsupported parts are escalated. |
+| `ESCALATE` | The request is unsupported, out of scope, unknown, or blocked by policy. |
+| `NO_QUESTION` | The turn adds case details but asks no question. |
+
+## Project Layout
+
+```text
+graph.py                 LangGraph workflow and transitions
+resolver.py, facts.py    Deterministic policy resolution and case facts
+router.py, retriever.py  Metadata routing and BM25 retrieval
+gate.py, verifier.py     Claim grounding, templates, and reply checks
+llm.py, config.py        Provider adapters, validation, and configuration
+memory.py                Conversation state
+data/kb/                 Knowledge articles
+data/policy/             Policy rules
+data/raw/                Source documents
+tests/                   Unit and scenario tests
+scripts/                 Paraphrase and LangSmith evaluation tools
+traces/                  Saved run traces
+```
+
+## Scope And Limitations
+
+This prototype tracks one governing rule per case. A customer discussing multiple disputes governed by different rules needs per-dispute memory before the system can reliably keep those decisions separate. The evaluation set is small, and the deterministic keyword path intentionally escalates some paraphrases it does not recognize.
